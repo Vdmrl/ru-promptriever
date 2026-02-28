@@ -160,8 +160,15 @@ class RetrieverGradCache(GradCache):
             else:
                 break
 
-        was_gc_enabled = getattr(hf_model, "gradient_checkpointing", False)
-        if was_gc_enabled:
+        was_gc_enabled = False
+        if hasattr(hf_model, "is_gradient_checkpointing"):
+            was_gc_enabled = hf_model.is_gradient_checkpointing
+        elif hasattr(hf_model, "gradient_checkpointing"):
+            was_gc_enabled = hf_model.gradient_checkpointing
+
+        if was_gc_enabled and hasattr(hf_model, "gradient_checkpointing_disable"):
+            hf_model.gradient_checkpointing_disable()
+        elif was_gc_enabled:
             hf_model.gradient_checkpointing = False
 
         with torch.no_grad():
@@ -170,7 +177,9 @@ class RetrieverGradCache(GradCache):
                 y = self.model_call(model, x)
                 model_reps.append(self.get_reps(y))
 
-        if was_gc_enabled:
+        if was_gc_enabled and hasattr(hf_model, "gradient_checkpointing_enable"):
+            hf_model.gradient_checkpointing_enable()
+        elif was_gc_enabled:
             hf_model.gradient_checkpointing = True
 
         if has_ddp:
