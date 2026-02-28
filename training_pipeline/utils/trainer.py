@@ -184,15 +184,20 @@ class RetrieverGradCache(GradCache):
         cache, loss = self.build_cache(*all_reps, **loss_kwargs)
         cache = [c.split(chunk_size) for c, chunk_size in zip(cache, self.chunk_sizes)]
 
-        for model, x, model_cache, rnd_states in zip(
-            self.models, model_inputs, cache, all_rnd_states
+        for i, (model, x, model_cache, rnd_states) in enumerate(
+            zip(self.models, model_inputs, cache, all_rnd_states)
         ):
+            # Only allow sync on the very last chunk of the very last input (passages)
+            sync_last_chunk = (
+                True if (no_sync_except_last and i == len(self.models) - 1) else False
+            )
+
             self.forward_backward(
                 model,
                 x,
                 model_cache,
                 rnd_states,
-                no_sync_except_last=no_sync_except_last,
+                sync_last_chunk=sync_last_chunk,
             )
 
         return loss
@@ -218,12 +223,32 @@ class RetrieverGradCache(GradCache):
         model_inputs,
         cached_gradients,
         random_states,
-        no_sync_except_last=False,
+        sync_last_chunk=False,
     ):
-        if no_sync_except_last and hasattr(model, "no_sync"):
-            sync_contexts = [model.no_sync for _ in range(len(model_inputs) - 1)] + [
-                nullcontext
-            ]
+        # We need to find the actual DDP module if it exists
+        # to call its `no_sync` context manager.
+        ds_engine = model
+        while (
+            hasattr(ds_engine, "module")
+            or hasattr(ds_engine, "model")
+            or hasattr(ds_engine, "base_model")
+        ):
+            if hasattr(ds_engine, "no_sync"):
+                break
+            if hasattr(ds_engine, "module"):
+                ds_engine = ds_engine.module
+            elif hasattr(ds_engine, "base_model"):
+                ds_engine = ds_engine.base_model
+            elif hasattr(ds_engine, "model"):
+                ds_engine = getattr(ds_engine, "model")
+
+        if hasattr(ds_engine, "no_sync"):
+            if sync_last_chunk:
+                sync_contexts = [
+                    ds_engine.no_sync for _ in range(len(model_inputs) - 1)
+                ] + [nullcontext]
+            else:
+                sync_contexts = [ds_engine.no_sync for _ in range(len(model_inputs))]
         else:
             sync_contexts = [nullcontext for _ in range(len(model_inputs))]
 
@@ -236,7 +261,11 @@ class RetrieverGradCache(GradCache):
                 reps = self.get_reps(y)
 
                 surrogate = torch.dot(reps.flatten(), gradient.flatten())
-                surrogate.backward()
+                # DeepSpeed requires we use engine.backward(loss) if available
+                if hasattr(ds_engine, "backward"):
+                    ds_engine.backward(surrogate)
+                else:
+                    surrogate.backward()
 
 
 class RetrieverTrainer(Trainer):
@@ -318,5 +347,9 @@ class RetrieverTrainer(Trainer):
 
         # We SKIP self.accelerator.backward(loss) here.
         # RetrieverGradCache._forward_backward has already called it chunk-by-chunk.
+
+        # For DeepSpeed, we need to explicitly step the DeepSpeedEngine since we skipped backward
+        if self.deepspeed:
+            self.deepspeed.step()
 
         return loss.detach() / self.args.gradient_accumulation_steps
