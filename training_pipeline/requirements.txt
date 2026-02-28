@@ -1,0 +1,43 @@
+# ============================================================
+# Training pipeline: ru-promptriever
+#
+# IMPORTANT — Install PyTorch FIRST (before this file), because the
+# correct wheel depends on your CUDA version:
+#
+#   CUDA 12.4 (RTX 5090 / Vast.ai baseline):
+#     pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+#
+#   CUDA 11.8 (older V100 nodes on Yandex Cloud):
+#     pip install torch==2.2.2 --index-url https://download.pytorch.org/whl/cu118
+#
+# Then install this file:
+#     pip install -r requirements.txt
+# ============================================================
+
+# --- Core HuggingFace stack ---
+transformers>=4.45.0,<5.0.0       # Trainer, AutoModelForCausalLM, BitsAndBytes
+datasets>=2.21.0,<3.0.0           # load_dataset, Arrow memory-mapping
+huggingface_hub>=0.24.0           # hf_hub_download (used in data.py)
+accelerate>=0.34.0                # Required by transformers Trainer + DeepSpeed bridge
+peft>=0.12.0                      # LoRA / QLoRA (LoraConfig, get_peft_model)
+
+# --- Quantization (QLoRA) ---
+bitsandbytes>=0.43.0              # 4-bit NF4 quantization on CUDA
+
+# --- Gradient Cache ---
+git+https://github.com/luyug/GradCache  # GradCache contrastive learning utility
+
+# --- DeepSpeed (multi-GPU) ---
+deepspeed>=0.15.0                 # ZeRO-2 optimizer sharding
+
+# --- Flash Attention 2 (RTX 5090 / Ada+ only, skip on V100) ---
+# Install separately if your GPU supports it (sm_80+):
+#   pip install flash-attn==2.6.3 --no-build-isolation
+# Do NOT add to this file — build depends on your GPU arch at compile time.
+
+# --- Logging ---
+wandb>=0.17.0                     # Experiment tracking
+
+# --- Utilities ---
+pyyaml>=6.0.1                     # Config loading
+tqdm>=4.66.0                      # Progress bars
