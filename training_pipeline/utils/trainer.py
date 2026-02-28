@@ -113,15 +113,11 @@ class ContrastiveLoss(nn.Module):
         return F.cross_entropy(scores, targets)
 
 
-class DeepSpeedGradCache(GradCache):
+class RetrieverGradCache(GradCache):
     """
-    Subclass of GradCache compatible with HuggingFace Trainer and DeepSpeed.
-    Removes the strict DDP assertions and uses Accelerator for backward passes.
+    Subclass of GradCache compatible with HuggingFace Trainer and DDP.
+    Implements no_sync gradient accumulation and avoids checkpointing CUDA errors.
     """
-
-    def __init__(self, *args, accelerator=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.accelerator = accelerator
 
     def forward_no_grad(self, model: nn.Module, model_inputs):
         """
@@ -163,7 +159,7 @@ class DeepSpeedGradCache(GradCache):
         model_reps = torch.cat(model_reps, dim=0)
         return model_reps, rnd_states
 
-    def cache_step(self, *model_inputs, **loss_kwargs):
+    def cache_step(self, *model_inputs, no_sync_except_last=False, **loss_kwargs):
         all_reps = []
         all_rnd_states = []
 
@@ -183,7 +179,13 @@ class DeepSpeedGradCache(GradCache):
         for model, x, model_cache, rnd_states in zip(
             self.models, model_inputs, cache, all_rnd_states
         ):
-            self.forward_backward(model, x, model_cache, rnd_states)
+            self.forward_backward(
+                model,
+                x,
+                model_cache,
+                rnd_states,
+                no_sync_except_last=no_sync_except_last,
+            )
 
         return loss
 
@@ -203,9 +205,19 @@ class DeepSpeedGradCache(GradCache):
         return cache, loss.detach()
 
     def forward_backward(
-        self, model: nn.Module, model_inputs, cached_gradients, random_states
+        self,
+        model: nn.Module,
+        model_inputs,
+        cached_gradients,
+        random_states,
+        no_sync_except_last=False,
     ):
-        sync_contexts = [nullcontext for _ in range(len(model_inputs))]
+        if no_sync_except_last and hasattr(model, "no_sync"):
+            sync_contexts = [model.no_sync for _ in range(len(model_inputs) - 1)] + [
+                nullcontext
+            ]
+        else:
+            sync_contexts = [nullcontext for _ in range(len(model_inputs))]
 
         for x, state, gradient, sync_context in zip(
             model_inputs, random_states, cached_gradients, sync_contexts
@@ -216,12 +228,7 @@ class DeepSpeedGradCache(GradCache):
                 reps = self.get_reps(y)
 
                 surrogate = torch.dot(reps.flatten(), gradient.flatten())
-
-                # Use HF accelerator for backward pass to trigger DeepSpeed/ZeRO reduction correctly
-                if self.accelerator is not None:
-                    self.accelerator.backward(surrogate)
-                else:
-                    surrogate.backward()
+                surrogate.backward()
 
 
 class RetrieverTrainer(Trainer):
@@ -258,13 +265,12 @@ class RetrieverTrainer(Trainer):
             if scaler is None:
                 scaler = getattr(getattr(self, "accelerator", None), "scaler", None)
 
-            self._gc = DeepSpeedGradCache(
+            self._gc = RetrieverGradCache(
                 models=[self._encoder_wrapper, self._encoder_wrapper],
                 chunk_sizes=self.gc_chunk_size,
                 loss_fn=loss_fn,
                 fp16=self.args.fp16,
                 scaler=scaler,
-                accelerator=getattr(self, "accelerator", None),
             )
         return self._gc
 
@@ -296,6 +302,6 @@ class RetrieverTrainer(Trainer):
             loss = loss.mean()
 
         # We SKIP self.accelerator.backward(loss) here.
-        # DeepSpeedGradCache._forward_backward has already called it chunk-by-chunk.
+        # RetrieverGradCache._forward_backward has already called it chunk-by-chunk.
 
         return loss.detach() / self.args.gradient_accumulation_steps

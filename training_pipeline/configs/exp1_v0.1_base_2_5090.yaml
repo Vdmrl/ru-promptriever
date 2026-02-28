@@ -61,9 +61,6 @@ gradient_checkpointing: true
 dataloader_num_workers: 4
 temperature: 0.01
 
-# --- DeepSpeed ---
-deepspeed: "configs/ds_config.json"
-
 # --- Logging Auth ---
 report_to: "wandb"
 wandb_key: null
