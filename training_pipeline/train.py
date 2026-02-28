@@ -162,7 +162,7 @@ def train(cfg: dict) -> None:
         warmup_steps=cfg.get("warmup_steps", 100),
         fp16=cfg.get("fp16", False),
         bf16=cfg.get("bf16", False),
-        evaluation_strategy=cfg.get("evaluation_strategy", "no"),
+        eval_strategy=cfg.get("evaluation_strategy", "no"),
         eval_steps=cfg.get("eval_steps", None),
         logging_steps=cfg.get("logging_steps", 10),
         save_strategy=cfg.get("save_strategy", "steps"),
