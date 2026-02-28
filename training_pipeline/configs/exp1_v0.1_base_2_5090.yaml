@@ -41,10 +41,11 @@ max_len_passage: 256
 gc_chunk_size: 4                       # 4 × 31 = 124 passages per chunk; safe for 24GB VRAM
 
 # --- Training ---
-# Effective batch size = per_device × accum × num_gpus = 8 × 8 × 2 = 128
+# Effective batch size = per_device × accum × num_gpus = 64 × 1 × 2 = 128
 # This matches the Promptriever / RepLLaMA paper exactly.
-per_device_train_batch_size: 8
-gradient_accumulation_steps: 8         # Effective batch = 8 * 8 * 2 GPUs = 128
+# We set accum=1 so that Accelerate doesn't wrap GradCache in a nested `no_sync`.
+per_device_train_batch_size: 64
+gradient_accumulation_steps: 1         # Effective batch = 64 * 1 * 2 GPUs = 128
 num_train_epochs: 1
 max_steps: -1                          # Full epoch
 learning_rate: 1.0e-4

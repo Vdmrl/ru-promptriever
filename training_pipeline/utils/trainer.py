@@ -137,8 +137,17 @@ class RetrieverGradCache(GradCache):
         rnd_states = []
         model_reps = []
 
+        # We MUST completely bypass DDP during the no-grad pass to prevent
+        # early buffer broadcasts or DDP hang deadlocks.
+        original_model = model.model
+        from torch.nn.parallel import DistributedDataParallel as DDP
+
+        has_ddp = isinstance(original_model, DDP)
+        if has_ddp:
+            model.model = original_model.module
+
         # Find the underlying HuggingFace model
-        hf_model = model
+        hf_model = model.model
         while (
             hasattr(hf_model, "model")
             or hasattr(hf_model, "base_model")
@@ -163,6 +172,9 @@ class RetrieverGradCache(GradCache):
 
         if was_gc_enabled:
             hf_model.gradient_checkpointing = True
+
+        if has_ddp:
+            model.model = original_model
 
         model_reps = torch.cat(model_reps, dim=0)
         return model_reps, rnd_states
