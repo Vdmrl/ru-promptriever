@@ -35,17 +35,18 @@ def load_config(config_path: str) -> dict:
 
 
 def setup_wandb(cfg: dict) -> None:
-    """Initialize wandb logging. Falls back to no logging if no API key is found."""
+    """Initialize wandb logging. Falls back to .netrc cache if no explicit key is found."""
     wandb_key = cfg.get("wandb_key") or os.environ.get("WANDB_API_KEY")
 
     if wandb_key:
         wandb.login(key=wandb_key)
         print(
-            f"[wandb] Logged in. Project: {cfg.get('wandb_project', 'ru-promptriever')}"
+            f"[wandb] Logged in explicitly. Project: {cfg.get('wandb_project', 'ru-promptriever')}"
         )
     else:
-        cfg["report_to"] = "none"
-        print("[wandb] No API key found. Logging disabled.")
+        print(
+            "[wandb] No explicit API key found in config. Relying on systemic 'wandb login' (.netrc cache)."
+        )
 
 
 def build_model(cfg: dict):
@@ -69,7 +70,7 @@ def build_model(cfg: dict):
         device_map={"": int(os.environ.get("LOCAL_RANK", 0))},
         trust_remote_code=True,
         attn_implementation=attn_impl,
-        torch_dtype=torch_dtype,
+        dtype=torch_dtype,
     )
     model = prepare_model_for_kbit_training(model)
 

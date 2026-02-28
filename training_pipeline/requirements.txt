@@ -31,9 +31,7 @@ git+https://github.com/luyug/GradCache  # GradCache contrastive learning utility
 deepspeed>=0.15.0                 # ZeRO-2 optimizer sharding
 
 # --- Flash Attention 2 (RTX 5090 / Ada+ only, skip on V100) ---
-# Install separately if your GPU supports it (sm_80+):
-#   pip install flash-attn==2.6.3 --no-build-isolation
-# Do NOT add to this file — build depends on your GPU arch at compile time.
+flash-attn>=2.5.0 --no-build-isolation
 
 # --- Logging ---
 wandb>=0.17.0                     # Experiment tracking
