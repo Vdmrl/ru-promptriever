@@ -176,20 +176,30 @@ class RetrieverGradCache(GradCache):
             for x, chunk_size in zip(model_inputs, self.chunk_sizes)
         ]
 
+        import os
+
+        rank = os.environ.get("LOCAL_RANK", "0")
+        print(f"[Rank {rank}] cache_step: Starting forward no grad...")
         for model, x in zip(self.models, model_inputs):
             model_reps, rnd_states = self.forward_no_grad(model, x)
             all_reps.append(model_reps)
             all_rnd_states.append(rnd_states)
 
+        print(f"[Rank {rank}] cache_step: Finished forward no grad. Building cache...")
+
         cache, loss = self.build_cache(*all_reps, **loss_kwargs)
         cache = [c.split(chunk_size) for c, chunk_size in zip(cache, self.chunk_sizes)]
 
+        print(f"[Rank {rank}] cache_step: Forward backward starting...")
         for i, (model, x, model_cache, rnd_states) in enumerate(
             zip(self.models, model_inputs, cache, all_rnd_states)
         ):
             # Only allow sync on the very last chunk of the very last input (passages)
             sync_last_chunk = (
                 True if (no_sync_except_last and i == len(self.models) - 1) else False
+            )
+            print(
+                f"[Rank {rank}] cache_step: forward_backward on model {i}, sync_last={sync_last_chunk}"
             )
 
             self.forward_backward(
@@ -200,6 +210,7 @@ class RetrieverGradCache(GradCache):
                 sync_last_chunk=sync_last_chunk,
             )
 
+        print(f"[Rank {rank}] cache_step: Finished.")
         return loss
 
     def build_cache(self, *reps: torch.Tensor, **loss_kwargs):
@@ -252,9 +263,16 @@ class RetrieverGradCache(GradCache):
         else:
             sync_contexts = [nullcontext for _ in range(len(model_inputs))]
 
-        for x, state, gradient, sync_context in zip(
-            model_inputs, random_states, cached_gradients, sync_contexts
+        import os
+
+        rank = os.environ.get("LOCAL_RANK", "0")
+
+        for idx, (x, state, gradient, sync_context) in enumerate(
+            zip(model_inputs, random_states, cached_gradients, sync_contexts)
         ):
+            print(
+                f"[Rank {rank}] forward_backward chunk {idx}/{len(model_inputs)}: Context {sync_context}"
+            )
             with sync_context():
                 with state:
                     y = self.model_call(model, x)
@@ -262,10 +280,12 @@ class RetrieverGradCache(GradCache):
 
                 surrogate = torch.dot(reps.flatten(), gradient.flatten())
                 # DeepSpeed requires we use engine.backward(loss) if available
+                print(f"[Rank {rank}] forward_backward chunk {idx}: Doing backward...")
                 if hasattr(ds_engine, "backward"):
                     ds_engine.backward(surrogate)
                 else:
                     surrogate.backward()
+                print(f"[Rank {rank}] forward_backward chunk {idx}: Backward done.")
 
 
 class RetrieverTrainer(Trainer):
