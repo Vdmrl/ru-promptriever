@@ -164,10 +164,30 @@ class RetrieverGradCache(GradCache):
         if was_gc_enabled:
             hf_model.gradient_checkpointing = False
 
+        import os
+        import sys
+
+        rank = os.environ.get("LOCAL_RANK", "0")
+
         with torch.no_grad():
-            for x in model_inputs:
+            for idx, x in enumerate(model_inputs):
+                print(
+                    f"[Rank {rank}] forward_no_grad: Processing chunk {idx + 1}/{len(model_inputs)}"
+                )
+                sys.stdout.flush()
+
                 rnd_states.append(RandContext(*self.get_input_tensors(x)))
+
+                print(
+                    f"[Rank {rank}] forward_no_grad: Calling model for chunk {idx + 1}..."
+                )
+                sys.stdout.flush()
                 y = self.model_call(model, x)
+                print(
+                    f"[Rank {rank}] forward_no_grad: Model call complete for chunk {idx + 1}."
+                )
+                sys.stdout.flush()
+
                 model_reps.append(self.get_reps(y))
 
         if was_gc_enabled:
