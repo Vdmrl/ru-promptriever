@@ -321,7 +321,7 @@ class RetrieverTrainer(Trainer):
         self._gc = None  # Lazy initialization
         self._encoder_wrapper = None
 
-    def _get_gc(self) -> GradCache:
+    def _get_gc(self, queries, passages) -> GradCache:
         """Lazily build GradCache once the model is on GPU."""
         if self._gc is None:
             self._encoder_wrapper = EncoderWrapper(self.model)
@@ -334,9 +334,23 @@ class RetrieverTrainer(Trainer):
             if scaler is None:
                 scaler = getattr(getattr(self, "accelerator", None), "scaler", None)
 
+            # Dynamically calc physical batch sizes
+            q_bs = queries["input_ids"].shape[0]
+            p_bs = passages["input_ids"].shape[0]
+            group_size = p_bs // q_bs
+
+            import os
+            import sys
+
+            rank = os.environ.get("LOCAL_RANK", "0")
+            print(
+                f"[Rank {rank}] Initializing GradCache with q_chunks={self.gc_chunk_size}, p_chunks={self.gc_chunk_size * group_size}"
+            )
+            sys.stdout.flush()
+
             self._gc = RetrieverGradCache(
                 models=[self._encoder_wrapper, self._encoder_wrapper],
-                chunk_sizes=self.gc_chunk_size,
+                chunk_sizes=[self.gc_chunk_size, self.gc_chunk_size * group_size],
                 loss_fn=loss_fn,
                 fp16=self.args.fp16,
                 scaler=scaler,
@@ -350,7 +364,7 @@ class RetrieverTrainer(Trainer):
         queries = inputs["queries"]
         passages = inputs["passages"]
 
-        gc = self._get_gc()
+        gc = self._get_gc(queries, passages)
 
         # Dynamically ensure gc uses the current (potentially DDP-wrapped) model
         if getattr(self, "_current_wrapped_model", None) is not model:
