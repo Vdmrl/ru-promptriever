@@ -5,7 +5,7 @@
 
 # --- Model ---
 model_name_or_path: "Qwen/Qwen3-8B"
-attn_implementation: "flash_attention_2"       # 5090 fully supports Flash Attention 2
+attn_implementation: "sdpa"       # 5090 fully supports Flash Attention 2
 torch_dtype: "bfloat16"                # 5090 optimally runs on bf16
 
 # --- QLoRA (4-bit NF4 base + LoRA adapters — see train.py BitsAndBytesConfig) ---
