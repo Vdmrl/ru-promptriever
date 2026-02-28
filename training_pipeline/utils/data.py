@@ -154,6 +154,7 @@ class RetrieverCollator:
             truncation=True,
             max_length=self.max_len_query,
             return_tensors="pt",
+            pad_to_multiple_of=8,
         )
 
         p_tokens = self.tokenizer(
@@ -162,6 +163,7 @@ class RetrieverCollator:
             truncation=True,
             max_length=self.max_len_passage,
             return_tensors="pt",
+            pad_to_multiple_of=8,
         )
 
         num_negatives = len(batch[0]["negatives"]) if batch else 0

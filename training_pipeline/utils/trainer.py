@@ -19,6 +19,7 @@ import torch.nn.functional as F
 from transformers import Trainer
 
 from grad_cache import GradCache
+from grad_cache.context_managers import RandContext
 from contextlib import nullcontext
 
 
@@ -121,6 +122,46 @@ class DeepSpeedGradCache(GradCache):
     def __init__(self, *args, accelerator=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.accelerator = accelerator
+
+    def forward_no_grad(self, model: nn.Module, model_inputs):
+        """
+        The first forward pass without gradient computation.
+        In modern transformers, running gradient_checkpointing inside torch.no_grad()
+        with bitsandbytes 4-bit quantization causes CUBLAS_STATUS_INVALID_VALUE errors.
+        We temporarily disable gradient checkpointing for this pass if it's active.
+        """
+        rnd_states = []
+        model_reps = []
+
+        # Find the underlying HuggingFace model
+        hf_model = model
+        while (
+            hasattr(hf_model, "model")
+            or hasattr(hf_model, "base_model")
+            or hasattr(hf_model, "module")
+        ):
+            if hasattr(hf_model, "module"):
+                hf_model = hf_model.module
+            elif hasattr(hf_model, "base_model"):
+                hf_model = hf_model.base_model
+            elif hasattr(hf_model, "model"):
+                hf_model = getattr(hf_model, "model")
+
+        was_gc_enabled = getattr(hf_model, "gradient_checkpointing", False)
+        if was_gc_enabled:
+            hf_model.gradient_checkpointing = False
+
+        with torch.no_grad():
+            for x in model_inputs:
+                rnd_states.append(RandContext(*self.get_input_tensors(x)))
+                y = self.model_call(model, x)
+                model_reps.append(self.get_reps(y))
+
+        if was_gc_enabled:
+            hf_model.gradient_checkpointing = True
+
+        model_reps = torch.cat(model_reps, dim=0)
+        return model_reps, rnd_states
 
     def cache_step(self, *model_inputs, **loss_kwargs):
         all_reps = []
