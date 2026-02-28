@@ -189,9 +189,20 @@ class RetrieverGradCache(GradCache):
         ]
 
         import os
+        import sys
 
         rank = os.environ.get("LOCAL_RANK", "0")
+
+        # Add a strict distributed barrier to enforce GPU sync before starting GradCache inner loop
+        if torch.distributed.is_initialized():
+            print(
+                f"[Rank {rank}] cache_step: Waiting at barrier before forward no grad..."
+            )
+            sys.stdout.flush()
+            torch.distributed.barrier()
+
         print(f"[Rank {rank}] cache_step: Starting forward no grad...")
+        sys.stdout.flush()
         for model, x in zip(self.models, model_inputs):
             model_reps, rnd_states = self.forward_no_grad(model, x)
             all_reps.append(model_reps)
