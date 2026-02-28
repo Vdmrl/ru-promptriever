@@ -19,6 +19,7 @@ import torch.nn.functional as F
 from transformers import Trainer
 
 from grad_cache import GradCache
+from contextlib import nullcontext
 
 
 def _last_token_pool(
@@ -111,6 +112,77 @@ class ContrastiveLoss(nn.Module):
         return F.cross_entropy(scores, targets)
 
 
+class DeepSpeedGradCache(GradCache):
+    """
+    Subclass of GradCache compatible with HuggingFace Trainer and DeepSpeed.
+    Removes the strict DDP assertions and uses Accelerator for backward passes.
+    """
+
+    def __init__(self, *args, accelerator=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.accelerator = accelerator
+
+    def cache_step(self, *model_inputs, **loss_kwargs):
+        all_reps = []
+        all_rnd_states = []
+
+        model_inputs = [
+            self.split_inputs(x, chunk_size)
+            for x, chunk_size in zip(model_inputs, self.chunk_sizes)
+        ]
+
+        for model, x in zip(self.models, model_inputs):
+            model_reps, rnd_states = self.forward_no_grad(model, x)
+            all_reps.append(model_reps)
+            all_rnd_states.append(rnd_states)
+
+        cache, loss = self.build_cache(*all_reps, **loss_kwargs)
+        cache = [c.split(chunk_size) for c, chunk_size in zip(cache, self.chunk_sizes)]
+
+        for model, x, model_cache, rnd_states in zip(
+            self.models, model_inputs, cache, all_rnd_states
+        ):
+            self.forward_backward(model, x, model_cache, rnd_states)
+
+        return loss
+
+    def build_cache(self, *reps: torch.Tensor, **loss_kwargs):
+        reps = [r.detach().requires_grad_() for r in reps]
+        with torch.cuda.amp.autocast() if self.fp16 else nullcontext():
+            loss = self.compute_loss(*reps, **loss_kwargs)
+
+        # Compute gradient of loss w.r.t representations.
+        # This graph is detached from the model, so local backward() is perfectly safe.
+        if self.fp16 and self.scaler is not None:
+            self.scaler.scale(loss).backward()
+        else:
+            loss.backward()
+
+        cache = [r.grad for r in reps]
+        return cache, loss.detach()
+
+    def forward_backward(
+        self, model: nn.Module, model_inputs, cached_gradients, random_states
+    ):
+        sync_contexts = [nullcontext for _ in range(len(model_inputs))]
+
+        for x, state, gradient, sync_context in zip(
+            model_inputs, random_states, cached_gradients, sync_contexts
+        ):
+            with sync_context():
+                with state:
+                    y = self.model_call(model, x)
+                reps = self.get_reps(y)
+
+                surrogate = torch.dot(reps.flatten(), gradient.flatten())
+
+                # Use HF accelerator for backward pass to trigger DeepSpeed/ZeRO reduction correctly
+                if self.accelerator is not None:
+                    self.accelerator.backward(surrogate)
+                else:
+                    surrogate.backward()
+
+
 class RetrieverTrainer(Trainer):
     """
     HuggingFace Trainer with GradCache integration for contrastive learning.
@@ -145,29 +217,44 @@ class RetrieverTrainer(Trainer):
             if scaler is None:
                 scaler = getattr(getattr(self, "accelerator", None), "scaler", None)
 
-            self._gc = GradCache(
+            self._gc = DeepSpeedGradCache(
                 models=[self._encoder_wrapper, self._encoder_wrapper],
                 chunk_sizes=self.gc_chunk_size,
                 loss_fn=loss_fn,
                 fp16=self.args.fp16,
                 scaler=scaler,
+                accelerator=getattr(self, "accelerator", None),
             )
         return self._gc
 
     def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         """
         Compute contrastive loss via GradCache.
-
-        Expected ``inputs`` keys (produced by RetrieverCollator):
-          - queries:       {input_ids, attention_mask}
-          - passages:      {input_ids, attention_mask}
-          - num_negatives: int
         """
         queries = inputs["queries"]
         passages = inputs["passages"]
 
         gc = self._get_gc()
 
-        loss = gc(queries, passages, no_sync_except_last=True)
+        loss = gc(queries, passages)
 
         return (loss, None) if return_outputs else loss
+
+    def training_step(self, model, inputs, num_items_in_batch=None):
+        """
+        Override training_step to bypass HF Trainer's native backward() call,
+        because DeepSpeedGradCache computes and accumulates gradients internally.
+        """
+        model.train()
+        inputs = self._prepare_inputs(inputs)
+
+        with self.compute_loss_context_manager():
+            loss = self.compute_loss(model, inputs)
+
+        if self.args.n_gpu > 1:
+            loss = loss.mean()
+
+        # We SKIP self.accelerator.backward(loss) here.
+        # DeepSpeedGradCache._forward_backward has already called it chunk-by-chunk.
+
+        return loss.detach() / self.args.gradient_accumulation_steps
