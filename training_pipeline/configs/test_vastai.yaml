@@ -1,0 +1,63 @@
+# =============================================================================
+# Config for testing on Vast.ai (2x RTX 5090, 64 GB VRAM total)
+# Launch: python train.py --config configs/test_vastai.yaml
+# =============================================================================
+
+# --- Model ---
+model_name_or_path: "Qwen/Qwen3-8B"
+attn_implementation: "flash_attention_2"       # 5090 fully supports Flash Attention 2
+torch_dtype: "bfloat16"                # 5090 optimally runs on bf16
+
+# --- QLoRA (4-bit NF4 base + LoRA adapters — see train.py BitsAndBytesConfig) ---
+# Rank kept at 32 (paper default) even for test run — we're testing correctness, not perf
+lora_r: 16
+lora_alpha: 32
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# --- Data ---
+train_data_path: "hf://datasets/Vladimirlv/ru-promptriever-dataset-v0.1/train.parquet"
+eval_data_path: "hf://datasets/Vladimirlv/ru-promptriever-dataset-v0.1/val.parquet"
+num_negatives: 7                       # Number of negatives per query
+max_len_query: 304                     # Matches Promptriever (accounts for instructions)
+max_len_passage: 256                   # Passage max length
+
+# --- GradCache ---
+gc_chunk_size: 2                       # Physical sub-batch size for GPU (small for V100)
+
+# --- Training ---
+# NOTE: batch size here is intentionally tiny for a smoke-test (200 steps).
+# Paper baseline uses effective batch=128. See exp1_v0.1_base_2_5090.yaml for full config.
+output_dir: "./output_model_v100_test"
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 16       # Effective batch = 1 * 16 * 1 GPU = 16 (test only)
+num_train_epochs: 1
+max_steps: 200                         # Limit for testing
+learning_rate: 1.0e-4
+warmup_steps: 100
+fp16: false
+bf16: true
+evaluation_strategy: "steps"
+eval_steps: 100                        # Evaluate every N steps
+logging_steps: 10
+save_strategy: "steps"
+save_steps: 100
+push_to_hub: false                     # Set to true to upload checkpoints to HF Hub
+hub_model_id: null                     # Only needed if push_to_hub is true (e.g. "username/ru-promptriever")
+gradient_checkpointing: true
+dataloader_num_workers: 2
+temperature: 0.01                      # Temperature for contrastive loss
+
+# --- DeepSpeed ---
+deepspeed: null                        # Disabled for single GPU
+
+# --- Logging (wandb) ---
+report_to: "wandb"
+wandb_project: "ru-promptriever"
+wandb_key: null                        # Set key here or via WANDB_API_KEY env var
