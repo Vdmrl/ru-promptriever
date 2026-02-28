@@ -27,11 +27,12 @@ bitsandbytes>=0.43.0              # 4-bit NF4 quantization on CUDA
 # --- Gradient Cache ---
 git+https://github.com/luyug/GradCache  # GradCache contrastive learning utility
 
-# --- DeepSpeed (multi-GPU) ---
-deepspeed>=0.15.0                 # ZeRO-2 optimizer sharding
+
 
 # --- Flash Attention 2 (RTX 5090 / Ada+ only, skip on V100) ---
-flash-attn>=2.5.0
+# Install separately if your GPU supports it (sm_80+):
+#   pip install flash-attn>=2.5.0 --no-build-isolation
+# Do NOT add to this file — build depends on your GPU arch at compile time.
 
 # --- Logging ---
 wandb>=0.17.0                     # Experiment tracking

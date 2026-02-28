@@ -57,6 +57,14 @@ class EncoderWrapper(nn.Module):
         super().__init__()
         self.model = model
 
+    @property
+    def no_sync(self):
+        """Delegate no_sync to the underlying DDP model if it exists."""
+        if hasattr(self.model, "no_sync"):
+            return self.model.no_sync
+        # If no_sync is not available, return a dummy context manager
+        return nullcontext
+
     def forward(self, **kwargs):
         """CausalLM forward -> last-token pool -> L2 normalize."""
         attention_mask = kwargs.get("attention_mask")
@@ -283,7 +291,14 @@ class RetrieverTrainer(Trainer):
 
         gc = self._get_gc()
 
-        loss = gc(queries, passages)
+        # Dynamically ensure gc uses the current (potentially DDP-wrapped) model
+        if getattr(self, "_current_wrapped_model", None) is not model:
+            self._current_wrapped_model = model
+            self._encoder_wrapper = EncoderWrapper(model)
+            gc.models = [self._encoder_wrapper, self._encoder_wrapper]
+
+        # Pass no_sync_except_last=True to optimize DDP accumulation
+        loss = gc(queries, passages, no_sync_except_last=True)
 
         return (loss, None) if return_outputs else loss
 

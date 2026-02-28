@@ -40,7 +40,6 @@ pip install -r requirements.txt
 pip install flash-attn>=2.5.0 --no-build-isolation
 ```
 
-### Launching Training (Multi-GPU)
 ```bash
-deepspeed --num_gpus=2 train.py --config configs/exp1_v0.1_base_2_5090.yaml
+torchrun --nproc_per_node=2 train.py --config configs/exp1_v0.1_base_2_5090.yaml
 ```
