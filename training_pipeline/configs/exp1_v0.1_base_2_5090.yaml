@@ -15,8 +15,9 @@ model_name_or_path: "Qwen/Qwen3-8B"
 attn_implementation: "sdpa"  # Uses PyTorch native optimization
 torch_dtype: "bfloat16"
 
-# --- QLoRA (4-bit NF4 base + LoRA adapters — see train.py BitsAndBytesConfig) ---
-# Rank and modules match RepLLaMA / Promptriever paper exactly
+# --- LoRA / QLoRA Configuration ---
+# By default, we use pure Bfloat16 LoRA for maximum throughput on 32GB GPUs.
+# To enable 4-bit QLoRA (which saves memory but is 2-4x slower), set `load_in_4bit: true` in the Training section below.
 lora_r: 32
 lora_alpha: 64            # α = 2r is a common convention; keeps effective LR stable
 lora_target_modules:
@@ -52,7 +53,7 @@ learning_rate: 1.0e-4
 warmup_steps: 100
 fp16: false
 bf16: true
-load_in_4bit: false
+load_in_4bit: false                    # Set to false to disable QLoRA (4-bit) and use pure bfloat16 LoRA. Massively speeds up training on RTX 5090s.
 evaluation_strategy: "steps"
 eval_steps: 500                        # Evaluate every N steps
 logging_steps: 10
