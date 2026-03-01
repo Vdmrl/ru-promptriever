@@ -38,10 +38,11 @@ max_len_query: 304
 max_len_passage: 256
 
 # --- GradCache ---
-# gc_chunk_size = physical sub-batch that fits in one forward pass.
-# With 15 negatives (16 passages per query), chunk size of 4 = 64 passages. 
-# This safely fits into 32GB VRAM while still allowing reasonable GradCache accumulation.
-gc_chunk_size: 4                       
+# gc_chunk_size = How many QUERIES (and their negatives) to process in a single mini-forward-pass.
+# This variable ONLY affects VRAM math, it has ZERO impact on model quality or actual batch size.
+# With 15 negatives (16 passages per query), chunk size of 8 = 128 physical passages in VRAM at once.
+# 16 OOM'd, so 8 should fit perfectly into 32GB.
+gc_chunk_size: 8                       
 
 # --- Training ---
 # From Promptriever paper, Appendix B (Line 807):
