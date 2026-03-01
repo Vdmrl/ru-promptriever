@@ -115,29 +115,7 @@ def build_model(cfg: dict):
         bias="none",
         task_type="CAUSAL_LM",
     )
-
-    # Check if we should resume from Hub
-    hub_model_id = cfg.get("hub_model_id")
-    if hub_model_id:
-        from huggingface_hub import HfApi
-
-        try:
-            api = HfApi()
-            api.model_info(hub_model_id)
-            print(
-                f"[OPTIMIZATION] Found existing model {hub_model_id} on HuggingFace Hub. Resuming adapters from it."
-            )
-            from peft import PeftModel
-
-            model = PeftModel.from_pretrained(model, hub_model_id, is_trainable=True)
-        except Exception:
-            print(
-                f"[OPTIMIZATION] No existing model found at {hub_model_id} on HuggingFace Hub. Initializing new LoRA adapters."
-            )
-            model = get_peft_model(model, peft_config)
-    else:
-        model = get_peft_model(model, peft_config)
-
+    model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
 
     return model
@@ -220,7 +198,7 @@ def train(cfg: dict) -> None:
         push_to_hub=cfg.get("push_to_hub", False),
         hub_model_id=cfg.get("hub_model_id", None),
         hub_token=os.environ.get("HF_TOKEN", None),  # HF_TOKEN env var is standard
-        hub_strategy="all_checkpoints",  # CRITICAL: push optimizer and rng_state too
+        hub_strategy="checkpoint",  # Push latest checkpoint for easy resuming
         gradient_checkpointing=cfg.get("gradient_checkpointing", True),
         gradient_checkpointing_kwargs={"use_reentrant": False},
         ddp_find_unused_parameters=False,
