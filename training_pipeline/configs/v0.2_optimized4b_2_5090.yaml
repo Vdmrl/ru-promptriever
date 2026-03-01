@@ -12,8 +12,7 @@ output_dir: "./output_v0.2_optimized4b"
 
 # --- Model ---
 model_name_or_path: "Qwen/Qwen3-4B"
-# Changed from sdpa to flash_attention_2
-attn_implementation: "flash_attention_2"
+attn_implementation: "sdpa"
 torch_dtype: "bfloat16"
 
 # --- LoRA Configuration ---
@@ -35,9 +34,9 @@ max_len_query: 304
 max_len_passage: 256
 
 # --- GradCache ---
-# With 7 negatives (8 passages per query), chunk size of 8 = 64 passages per chunk.
-# Flash Attention should let this easily fit without checkpointing
-gc_chunk_size: 8
+# With 7 negatives (8 passages per query), chunk size of 16 = 128 passages per chunk.
+# Reverted back to 16 since we re-enabled gradient_checkpointing
+gc_chunk_size: 16
 
 # --- Training ---
 # Effective batch size = per_device × accum × num_gpus = 8 × 8 × 2 = 128
@@ -58,7 +57,7 @@ logging_steps: 10
 save_strategy: "steps"
 save_steps: 500
 push_to_hub: true
-gradient_checkpointing: false          # Disabled to gain max speed (Flash Attention saves the VRAM)
+gradient_checkpointing: true           # Re-enabled to save VRAM and fix CUDA OOM
 dataloader_num_workers: 4
 temperature: 0.01
 
