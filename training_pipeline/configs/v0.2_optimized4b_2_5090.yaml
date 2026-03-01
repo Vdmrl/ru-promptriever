@@ -34,14 +34,13 @@ max_len_query: 304
 max_len_passage: 256
 
 # --- GradCache ---
-# Chunk size dictates how much memory is used per forward pass. 8 is very safe for 32GB VRAM.
-gc_chunk_size: 8
+# With 7 negatives (8 passages per query), chunk size of 16 = 128 passages per chunk.
+gc_chunk_size: 16
 
 # --- Training ---
-# Effective batch size = per_device × accum × num_gpus = 64 × 1 × 2 = 128
-# CRITICAL for Contrastive Learning: large per_device_train_batch_size creates a huge in-batch denominator!
-per_device_train_batch_size: 64
-gradient_accumulation_steps: 1
+# Effective batch size = per_device × accum × num_gpus = 8 × 8 × 2 = 128
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 8
 
 tf32: true
 num_train_epochs: 1
