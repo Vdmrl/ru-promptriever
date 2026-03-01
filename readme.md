@@ -41,5 +41,12 @@ pip install flash-attn>=2.5.0 --no-build-isolation
 ```
 
 ```bash
+# 4. Authenticate to Hugging Face (to download the model and datasets):
+huggingface-cli login
+
+# 5. Export WandB API key (from https://wandb.ai/authorize)
+export WANDB_API_KEY="your_api_key_here"
+
+# 6. Run training script
 torchrun --nproc_per_node=2 train.py --config configs/exp1_v0.1_base_2_5090.yaml
 ```
