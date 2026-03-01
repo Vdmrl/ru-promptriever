@@ -51,8 +51,8 @@ warmup_steps: 100
 fp16: false
 bf16: true
 load_in_4bit: false
-evaluation_strategy: "steps"
-eval_steps: 500
+evaluation_strategy: "no"
+# eval_steps: 500  # Disabled to prevent GradCache .backward() crash in Trainer's no_grad validation phase
 logging_steps: 10
 save_strategy: "steps"
 save_steps: 500
