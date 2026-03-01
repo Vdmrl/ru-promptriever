@@ -48,5 +48,5 @@ huggingface-cli login
 export WANDB_API_KEY="your_api_key_here"
 
 # 6. Run training script
-torchrun --nproc_per_node=2 train.py --config configs/exp1_v0.1_base_2_5090.yaml
+torchrun --nproc_per_node=2 train.py --config configs/v0.2_optimized4b_2_5090.yaml
 ```

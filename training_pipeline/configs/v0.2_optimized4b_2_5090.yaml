@@ -1,14 +1,14 @@
 # =============================================================================
 # Experiment 2: Optimized 4B config for fast training (~30-40h/epoch)
 # Config for full training on Vast.ai (2x RTX 5090)
-# Launch: torchrun --nproc_per_node=2 train.py --config configs/exp2_v0.1_optimized4b_2_5090.yaml
+# Launch: torchrun --nproc_per_node=2 train.py --config configs/v0.2_optimized4b_2_5090.yaml
 # =============================================================================
 
 # --- General Hub & Logging ---
 hub_model_id: "Vladimirlv/ru-promptriever-v0.2-optimized4b"
 wandb_project: "ru-promptriever"
-run_name: "exp2_v0.1_optimized4b"
-output_dir: "./output_exp2_v0.1_optimized4b"
+run_name: "v0.2_optimized4b"
+output_dir: "./output_v0.2_optimized4b"
 
 # --- Model ---
 model_name_or_path: "Qwen/Qwen3-4B"
