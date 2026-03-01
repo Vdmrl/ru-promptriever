@@ -34,9 +34,9 @@ max_len_query: 304
 max_len_passage: 256
 
 # --- GradCache ---
-# With 7 negatives (8 passages per query), chunk size of 16 = 128 passages per chunk.
-# Reverted back to 16 since we re-enabled gradient_checkpointing
-gc_chunk_size: 16
+# With 7 negatives (8 passages per query), chunk size of 32 = 256 passages per chunk.
+# Maximizing VRAM usage since we have 31GB free per GPU
+gc_chunk_size: 32
 
 # --- Training ---
 # Effective batch size = per_device × accum × num_gpus = 8 × 8 × 2 = 128
