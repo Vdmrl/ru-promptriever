@@ -84,18 +84,10 @@ class EncoderWrapper(nn.Module):
         # It's usually accessible via `.base_model.model` or similar.
         # PyTorch keeps track of ALL child modules via `.named_modules()`.
 
-        import sys, os
-
-        rank = os.environ.get("LOCAL_RANK", "0")
-
         # A bulletproof way to find the exact layer that OWNS "lm_head":
         for name, module in self.model.named_modules():
             if "lm_head" in module._modules:
                 owner_of_lm_head = module
-                if rank == "0":
-                    print(
-                        f"[DEBUG] Found exact owner via named_modules at '{name}'! Type: {type(owner_of_lm_head)}"
-                    )
                 break
 
         # Fallback for some strange Peft configurations where lm_head is a direct attribute
@@ -123,14 +115,9 @@ class EncoderWrapper(nn.Module):
         if owner_of_lm_head is not None:
             original_lm_head = getattr(owner_of_lm_head, "lm_head", None)
             owner_of_lm_head.lm_head = nn.Identity()
-            if rank == "0":
-                print(
-                    f"[DEBUG] Successfully monkey-patched lm_head on {type(owner_of_lm_head)}"
-                )
-        elif rank == "0":
-            print(f"[ERROR] Failed to find lm_head! Memory will OOM.")
-        if rank == "0":
-            sys.stdout.flush()
+        elif owner_of_lm_head is None:
+            # We never expect this since named_modules is exhaustive, but just in case
+            pass
 
         try:
             # For CausalLM without output_hidden_states, outputs.logits IS the final hidden state
@@ -313,14 +300,6 @@ class RetrieverGradCache(GradCache):
             for name, m in model.named_modules():
                 if hasattr(m, "no_sync"):
                     ds_engine = m
-                    import os, sys
-
-                    rank = os.environ.get("LOCAL_RANK", "0")
-                    if rank == "0":
-                        print(
-                            f"[DEBUG] Found DDP ds_engine with no_sync at '{name}'! Type: {type(ds_engine)}"
-                        )
-                        sys.stdout.flush()
                     break
 
         if ds_engine is None:

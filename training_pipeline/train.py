@@ -172,6 +172,7 @@ def train(cfg: dict) -> None:
         hub_token=os.environ.get("HF_TOKEN", None),  # HF_TOKEN env var is standard
         gradient_checkpointing=cfg.get("gradient_checkpointing", True),
         gradient_checkpointing_kwargs={"use_reentrant": False},
+        ddp_find_unused_parameters=False,
         dataloader_num_workers=cfg.get("dataloader_num_workers", 2),
         deepspeed=cfg.get("deepspeed"),
         remove_unused_columns=False,  # Required for custom collator
