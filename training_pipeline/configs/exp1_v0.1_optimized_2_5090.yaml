@@ -1,7 +1,7 @@
 # =============================================================================
 # Experiment 1: Optimized baseline mimicking Promptriever Appendix B specs
 # Config for full training on Vast.ai (2x RTX 5090)
-# Launch: deepspeed --num_gpus=2 train.py --config configs/exp1_v0.1_optimized_2_5090.yaml
+# Launch: torchrun --nproc_per_node=2 train.py --config configs/exp1_v0.1_optimized_2_5090.yaml
 # =============================================================================
 
 # --- General Hub & Logging ---

@@ -201,15 +201,19 @@ class RetrieverGradCache(GradCache):
             model.model = original_model.module
 
         # Recursively find any module with gradient_checkpointing and disable it
-        gc_modules = []
-        for m in model.modules():
-            gc_flag = getattr(m, "gradient_checkpointing", False)
-            if gc_flag is True:
-                try:
-                    m.gradient_checkpointing = False
-                    gc_modules.append(m)
-                except Exception:
-                    pass
+        # Cache this lookup to avoid O(N) traversal on every step
+        if not hasattr(self, "_gc_modules"):
+            self._gc_modules = []
+            for m in model.modules():
+                if getattr(m, "gradient_checkpointing", False) is True:
+                    self._gc_modules.append(m)
+
+        gc_modules = self._gc_modules
+        for m in gc_modules:
+            try:
+                m.gradient_checkpointing = False
+            except Exception:
+                pass
 
         with torch.no_grad():
             for x in model_inputs:
