@@ -81,7 +81,8 @@ class EncoderWrapper(nn.Module):
         owner_of_lm_head = None
 
         while target_engine is not None:
-            if hasattr(target_engine, "lm_head"):
+            # Check the physical module dictionary to bypass PeftModel __getattr__ proxies
+            if "lm_head" in getattr(target_engine, "_modules", {}):
                 owner_of_lm_head = target_engine
                 break
 
