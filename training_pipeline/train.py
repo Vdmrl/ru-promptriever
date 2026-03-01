@@ -51,7 +51,7 @@ def setup_wandb(cfg: dict) -> None:
 
 def build_model(cfg: dict):
     """Load model in 4-bit quantization (QLoRA) and apply LoRA adapters."""
-    model_name = cfg["model_name_or_path"]
+    model_name_or_path = cfg["model_name_or_path"]
     attn_impl = cfg.get("attn_implementation", "sdpa")
     torch_dtype_str = cfg.get("torch_dtype", "float16")
 
@@ -69,8 +69,12 @@ def build_model(cfg: dict):
     else:
         quantization_kwargs = {}
 
+    # Hardware Optimizations
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
     model = AutoModelForCausalLM.from_pretrained(
-        model_name,
+        model_name_or_path,
         device_map={"": int(os.environ.get("LOCAL_RANK", 0))},
         trust_remote_code=True,
         attn_implementation=attn_impl,
@@ -79,6 +83,19 @@ def build_model(cfg: dict):
     )
     if use_4bit:
         model = prepare_model_for_kbit_training(model)
+
+    # Extreme Performance Hack: Freeze the bottom N layers
+    freeze_bottom_layers = cfg.get("freeze_bottom_layers", 0)
+    if freeze_bottom_layers > 0:
+        if hasattr(model, "model") and hasattr(model.model, "layers"):
+            layers = model.model.layers
+            frozen_count = min(freeze_bottom_layers, len(layers))
+            for i in range(frozen_count):
+                for param in layers[i].parameters():
+                    param.requires_grad = False
+            print(
+                f"[OPTIMIZATION] Froze the bottom {frozen_count} layers of the transformer to massively accelerate backward pass."
+            )
 
     peft_config = LoraConfig(
         r=cfg.get("lora_r", 16),
@@ -168,6 +185,7 @@ def train(cfg: dict) -> None:
         warmup_steps=cfg.get("warmup_steps", 100),
         fp16=cfg.get("fp16", False),
         bf16=cfg.get("bf16", False),
+        tf32=cfg.get("tf32", False),
         eval_strategy=cfg.get("evaluation_strategy", "no"),
         eval_steps=cfg.get("eval_steps", None),
         logging_steps=cfg.get("logging_steps", 10),

@@ -39,9 +39,9 @@ max_len_passage: 256
 
 # --- GradCache ---
 # gc_chunk_size = physical sub-batch that fits in one forward pass.
-# With 15 negatives (16 passages per query), chunk size of 8 = 128 passages. 
-# This matches the physical batch size of the Promptriever paper authors roughly.
-gc_chunk_size: 4                       
+# With 15 negatives (16 passages per query), chunk size of 16 = 256 passages. 
+# This fully saturates the 32GB VRAM without bottlenecking GradCache chunk overhead.
+gc_chunk_size: 16                       
 
 # --- Training ---
 # From Promptriever paper, Appendix B (Line 807):
@@ -50,6 +50,8 @@ gc_chunk_size: 4
 per_device_train_batch_size: 8
 gradient_accumulation_steps: 8         
 
+freeze_bottom_layers: 20               # Qwen3-8B has 32 layers. Freezing 20 strictly keeps representation capabilities but massively cuts backward pass compute. Set to 0 or null to disable freezing.
+tf32: true                             # Enable TensorFloat-32 for extreme NVIDIA Blackwell hardware math speedups
 num_train_epochs: 1
 max_steps: -1                          
 learning_rate: 1.0e-4
