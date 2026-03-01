@@ -34,9 +34,9 @@ max_len_query: 304
 max_len_passage: 256
 
 # --- GradCache ---
-# With 7 negatives (8 passages per query), chunk size of 4 = 32 passages per chunk.
-# Lowered to 4 to fix CUDA OutOfMemoryError
-gc_chunk_size: 4
+# With 7 negatives (8 passages per query), chunk size of 16 = 128 passages per chunk.
+# Reverted back to 16 since we re-enabled gradient_checkpointing
+gc_chunk_size: 16
 
 # --- Training ---
 # Effective batch size = per_device × accum × num_gpus = 8 × 8 × 2 = 128
@@ -57,7 +57,7 @@ logging_steps: 10
 save_strategy: "steps"
 save_steps: 500
 push_to_hub: true
-gradient_checkpointing: false          # Disabled — 4B model + 7 negs fits in 32GB without it
+gradient_checkpointing: true           # Re-enabled to save VRAM and fix CUDA OOM
 dataloader_num_workers: 4
 temperature: 0.01
 
