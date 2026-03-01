@@ -57,6 +57,32 @@ class EncoderWrapper(nn.Module):
         super().__init__()
         self.model = model
 
+        # PRE-CACHE LM HEAD OWNER:
+        # When using PEFT/LoRA, the layer structure gets aggressively rewritten.
+        # Instead of traversing the tree blindly every single forward pass,
+        # we find the CausalLM base exactly ONE time and cache it.
+        self._owner_of_lm_head = None
+        for name, module in self.model.named_modules():
+            if "lm_head" in module._modules:
+                self._owner_of_lm_head = module
+                break
+
+        # Fallback for strange Peft configurations where lm_head is a direct attribute
+        if self._owner_of_lm_head is None:
+            curr = self.model
+            while curr is not None:
+                if "lm_head" in getattr(curr, "_modules", {}):
+                    self._owner_of_lm_head = curr
+                    break
+                if hasattr(curr, "base_model") and curr.base_model is not curr:
+                    curr = curr.base_model
+                elif hasattr(curr, "model") and curr.model is not curr:
+                    curr = curr.model
+                elif hasattr(curr, "module"):
+                    curr = curr.module
+                else:
+                    break
+
     @property
     def no_sync(self):
         """Delegate no_sync to the underlying DDP model if it exists."""
@@ -77,37 +103,8 @@ class EncoderWrapper(nn.Module):
         kwargs["use_cache"] = False
         kwargs["return_dict"] = True
 
-        owner_of_lm_head = None
-
-        # When using PEFT/LoRA, the layer structure gets aggressively rewritten.
-        # Instead of traversing the tree blindly, we can directly find the CausalLM base.
-        # It's usually accessible via `.base_model.model` or similar.
-        # PyTorch keeps track of ALL child modules via `.named_modules()`.
-
-        # A bulletproof way to find the exact layer that OWNS "lm_head":
-        for name, module in self.model.named_modules():
-            if "lm_head" in module._modules:
-                owner_of_lm_head = module
-                break
-
-        # Fallback for some strange Peft configurations where lm_head is a direct attribute
-        # but not registered as a submodule of any traceable parent.
-        if owner_of_lm_head is None:
-            # Try exploring standard wrapper names
-            curr = self.model
-            while curr is not None:
-                if "lm_head" in getattr(curr, "_modules", {}):
-                    owner_of_lm_head = curr
-                    break
-                if hasattr(curr, "base_model") and curr.base_model is not curr:
-                    # In Qwen+LoRA, base_model is LoraModel, its model is Qwen3ForCausalLM
-                    curr = curr.base_model
-                elif hasattr(curr, "model") and curr.model is not curr:
-                    curr = curr.model
-                elif hasattr(curr, "module"):
-                    curr = curr.module
-                else:
-                    break
+        # We use the pre-cached owner of lm_head to bypass graph traversal cost.
+        owner_of_lm_head = self._owner_of_lm_head
 
         # Temporarily replace lm_head with Identity to bypass the massive linear projection
         # without breaking DDP autograd hooks.
@@ -291,19 +288,20 @@ class RetrieverGradCache(GradCache):
         random_states,
         sync_last_chunk=False,
     ):
-        # We need to find the actual DDP module if it exists
-        # to call its `no_sync` context manager.
-        ds_engine = None
-        if hasattr(model, "no_sync"):
-            ds_engine = model
-        else:
-            for name, m in model.named_modules():
-                if hasattr(m, "no_sync"):
-                    ds_engine = m
-                    break
+        # Cache the DDP engine lookup to avoid O(N) traversal on every chunk
+        if not hasattr(self, "_ds_engine"):
+            self._ds_engine = None
+            if hasattr(model, "no_sync"):
+                self._ds_engine = model
+            else:
+                for name, m in model.named_modules():
+                    if hasattr(m, "no_sync"):
+                        self._ds_engine = m
+                        break
+            if self._ds_engine is None:
+                self._ds_engine = model  # fallback
 
-        if ds_engine is None:
-            ds_engine = model  # fallback
+        ds_engine = self._ds_engine
 
         if hasattr(ds_engine, "no_sync"):
             if sync_last_chunk:
@@ -415,6 +413,10 @@ class RetrieverTrainer(Trainer):
         """
         model.train()
         inputs = self._prepare_inputs(inputs)
+
+        # Suppress HF Trainer warning: "Could not estimate the number of tokens..."
+        if "input_ids" not in inputs and "queries" in inputs:
+            inputs["input_ids"] = inputs["queries"]["input_ids"]
 
         with self.compute_loss_context_manager():
             loss = self.compute_loss(model, inputs)
