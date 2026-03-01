@@ -78,9 +78,14 @@ class EncoderWrapper(nn.Module):
         kwargs["return_dict"] = True
 
         target_engine = self.model
-        while target_engine is not None and "lm_head" not in getattr(
-            target_engine, "_modules", {}
-        ):
+        owner_of_lm_head = None
+
+        while target_engine is not None:
+            if hasattr(target_engine, "lm_head"):
+                owner_of_lm_head = target_engine
+                break
+
+            # Traverse wrappers
             if hasattr(target_engine, "module"):
                 target_engine = target_engine.module
             elif (
@@ -98,9 +103,10 @@ class EncoderWrapper(nn.Module):
 
         # Temporarily replace lm_head with Identity to bypass the massive linear projection
         # without breaking DDP autograd hooks.
-        original_lm_head = getattr(target_engine, "lm_head", None)
-        if original_lm_head is not None:
-            target_engine.lm_head = nn.Identity()
+        original_lm_head = None
+        if owner_of_lm_head is not None:
+            original_lm_head = getattr(owner_of_lm_head, "lm_head", None)
+            owner_of_lm_head.lm_head = nn.Identity()
 
         try:
             # For CausalLM without output_hidden_states, outputs.logits IS the final hidden state
@@ -109,8 +115,8 @@ class EncoderWrapper(nn.Module):
             last_hidden = outputs.logits
         finally:
             # Restore the real head
-            if original_lm_head is not None:
-                target_engine.lm_head = original_lm_head
+            if owner_of_lm_head is not None and original_lm_head is not None:
+                owner_of_lm_head.lm_head = original_lm_head
 
         if attention_mask is not None:
             reps = _last_token_pool(last_hidden, attention_mask)
