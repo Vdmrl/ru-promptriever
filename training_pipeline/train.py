@@ -220,6 +220,7 @@ def train(cfg: dict) -> None:
         push_to_hub=cfg.get("push_to_hub", False),
         hub_model_id=cfg.get("hub_model_id", None),
         hub_token=os.environ.get("HF_TOKEN", None),  # HF_TOKEN env var is standard
+        hub_strategy="all_checkpoints",  # CRITICAL: push optimizer and rng_state too
         gradient_checkpointing=cfg.get("gradient_checkpointing", True),
         gradient_checkpointing_kwargs={"use_reentrant": False},
         ddp_find_unused_parameters=False,
