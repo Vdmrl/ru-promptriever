@@ -77,7 +77,6 @@ class EncoderWrapper(nn.Module):
         kwargs["use_cache"] = False
         kwargs["return_dict"] = True
 
-        target_engine = self.model
         owner_of_lm_head = None
 
         # When using PEFT/LoRA, the layer structure gets aggressively rewritten.
@@ -307,21 +306,25 @@ class RetrieverGradCache(GradCache):
     ):
         # We need to find the actual DDP module if it exists
         # to call its `no_sync` context manager.
-        ds_engine = model
-        while True:
-            if hasattr(ds_engine, "no_sync"):
-                break
-            if hasattr(ds_engine, "module"):
-                ds_engine = ds_engine.module
-            elif (
-                hasattr(ds_engine, "base_model")
-                and ds_engine.base_model is not ds_engine
-            ):
-                ds_engine = ds_engine.base_model
-            elif hasattr(ds_engine, "model") and ds_engine.model is not ds_engine:
-                ds_engine = getattr(ds_engine, "model")
-            else:
-                break
+        ds_engine = None
+        if hasattr(model, "no_sync"):
+            ds_engine = model
+        else:
+            for name, m in model.named_modules():
+                if hasattr(m, "no_sync"):
+                    ds_engine = m
+                    import os, sys
+
+                    rank = os.environ.get("LOCAL_RANK", "0")
+                    if rank == "0":
+                        print(
+                            f"[DEBUG] Found DDP ds_engine with no_sync at '{name}'! Type: {type(ds_engine)}"
+                        )
+                        sys.stdout.flush()
+                    break
+
+        if ds_engine is None:
+            ds_engine = model  # fallback
 
         if hasattr(ds_engine, "no_sync"):
             if sync_last_chunk:
