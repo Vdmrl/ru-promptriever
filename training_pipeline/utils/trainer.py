@@ -80,10 +80,24 @@ class EncoderWrapper(nn.Module):
         target_engine = self.model
         owner_of_lm_head = None
 
+        import sys, os
+
+        rank = os.environ.get("LOCAL_RANK", "0")
+
+        if rank == "0":
+            print(f"\n[DEBUG] START TRAVERSAL. target_engine: {type(target_engine)}")
+
         while target_engine is not None:
+            if rank == "0":
+                print(
+                    f"[DEBUG] Visit: {type(target_engine)} => Modules: {list(getattr(target_engine, '_modules', {}).keys())}"
+                )
+
             # Check the physical module dictionary to bypass PeftModel __getattr__ proxies
             if "lm_head" in getattr(target_engine, "_modules", {}):
                 owner_of_lm_head = target_engine
+                if rank == "0":
+                    print(f"[DEBUG] -> FOUND lm_head in {type(target_engine)}!")
                 break
 
             # Traverse wrappers
@@ -100,6 +114,8 @@ class EncoderWrapper(nn.Module):
             ):
                 target_engine = getattr(target_engine, "model")
             else:
+                if rank == "0":
+                    print(f"[DEBUG] -> DEAD END at {type(target_engine)}")
                 break
 
         # Temporarily replace lm_head with Identity to bypass the massive linear projection
@@ -108,6 +124,14 @@ class EncoderWrapper(nn.Module):
         if owner_of_lm_head is not None:
             original_lm_head = getattr(owner_of_lm_head, "lm_head", None)
             owner_of_lm_head.lm_head = nn.Identity()
+            if rank == "0":
+                print(
+                    f"[DEBUG] Successfully monkey-patched lm_head on {type(owner_of_lm_head)}"
+                )
+        elif rank == "0":
+            print(f"[ERROR] Failed to find lm_head! Memory will OOM.")
+        if rank == "0":
+            sys.stdout.flush()
 
         try:
             # For CausalLM without output_hidden_states, outputs.logits IS the final hidden state
