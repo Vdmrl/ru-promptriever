@@ -75,31 +75,30 @@ class EncoderWrapper(nn.Module):
         #    since we only want embeddings. Passing through it wastes ~4.8GB per chunk.
         kwargs.pop("output_hidden_states", None)
 
-        base_engine = self.model
-        while (
-            hasattr(base_engine, "module")
-            or hasattr(base_engine, "model")
-            or hasattr(base_engine, "base_model")
+        target_engine = self.model
+        while target_engine is not None and "lm_head" not in getattr(
+            target_engine, "_modules", {}
         ):
-            if hasattr(base_engine, "lm_head"):
-                break
-            if hasattr(base_engine, "module"):
-                base_engine = base_engine.module
+            if hasattr(target_engine, "module"):
+                target_engine = target_engine.module
             elif (
-                hasattr(base_engine, "base_model")
-                and base_engine.base_model is not base_engine
+                hasattr(target_engine, "base_model")
+                and target_engine.base_model is not target_engine
             ):
-                base_engine = base_engine.base_model
-            elif hasattr(base_engine, "model") and base_engine.model is not base_engine:
-                base_engine = getattr(base_engine, "model")
+                target_engine = target_engine.base_model
+            elif (
+                hasattr(target_engine, "model")
+                and target_engine.model is not target_engine
+            ):
+                target_engine = getattr(target_engine, "model")
             else:
                 break
 
         # Temporarily replace lm_head with Identity to bypass the massive linear projection
         # without breaking DDP autograd hooks.
-        original_lm_head = getattr(base_engine, "lm_head", None)
+        original_lm_head = getattr(target_engine, "lm_head", None)
         if original_lm_head is not None:
-            base_engine.lm_head = nn.Identity()
+            target_engine.lm_head = nn.Identity()
 
         try:
             # For CausalLM without output_hidden_states, outputs.logits IS the final hidden state
@@ -109,7 +108,7 @@ class EncoderWrapper(nn.Module):
         finally:
             # Restore the real head
             if original_lm_head is not None:
-                base_engine.lm_head = original_lm_head
+                target_engine.lm_head = original_lm_head
 
         if attention_mask is not None:
             reps = _last_token_pool(last_hidden, attention_mask)
