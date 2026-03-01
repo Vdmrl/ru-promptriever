@@ -35,9 +35,13 @@ class RetrieverDataset(Dataset):
         self,
         data_path: str,
         num_negatives: int = 7,
+        num_instruct_negatives: int = 3,
+        instruct_only: bool = False,
         seed: int = 42,
     ):
         self.num_negatives = num_negatives
+        self.num_instruct_negatives = num_instruct_negatives
+        self.num_hard_negatives = num_negatives - num_instruct_negatives
         self.rng = random.Random(seed)
 
         # Resolve hf:// URIs to local cached paths via hf_hub_download.
@@ -48,6 +52,12 @@ class RetrieverDataset(Dataset):
         self.dataset = load_dataset(
             "parquet", data_files={"train": local_path}, split="train"
         )
+
+        # Filter to instruction-augmented rows only (halves the dataset).
+        if instruct_only:
+            before = len(self.dataset)
+            self.dataset = self.dataset.filter(lambda x: x["has_instruction"])
+            print(f"[data] instruct_only filter: {before} → {len(self.dataset)} rows")
 
     @staticmethod
     def _resolve_data_path(data_path: str) -> str:
@@ -102,15 +112,40 @@ class RetrieverDataset(Dataset):
         else:
             positive = ""
 
-        # --- Negative passages ---
+        # --- Negative passages (typed sampling) ---
         neg_list = row.get("negative_passages", [])
         if neg_list is None:
             neg_list = []
-        negatives = [self._format_passage(n) for n in neg_list]
 
-        # Truncate or pad to a fixed number of negatives
-        if len(negatives) > self.num_negatives:
-            negatives = self.rng.sample(negatives, self.num_negatives)
+        # Split negatives by type: instruction_negative vs hard/BM25
+        instruct_negs = []
+        hard_negs = []
+        for n in neg_list:
+            if n.get("explanation") == "instruction_negative":
+                instruct_negs.append(self._format_passage(n))
+            else:
+                hard_negs.append(self._format_passage(n))
+
+        # Sample the requested number of each type
+        n_inst = min(self.num_instruct_negatives, len(instruct_negs))
+        n_hard = min(self.num_hard_negatives, len(hard_negs))
+
+        sampled_inst = self.rng.sample(instruct_negs, n_inst) if n_inst > 0 else []
+        sampled_hard = self.rng.sample(hard_negs, n_hard) if n_hard > 0 else []
+
+        # If one type is short, fill from the other
+        deficit = self.num_negatives - len(sampled_inst) - len(sampled_hard)
+        if deficit > 0:
+            remaining_inst = [x for x in instruct_negs if x not in sampled_inst]
+            remaining_hard = [x for x in hard_negs if x not in sampled_hard]
+            remaining = remaining_hard + remaining_inst
+            fill = remaining[:deficit]
+            sampled_hard.extend(fill)
+            deficit -= len(fill)
+
+        negatives = sampled_inst + sampled_hard
+
+        # Pad if still short
         while len(negatives) < self.num_negatives:
             negatives.append("")
 

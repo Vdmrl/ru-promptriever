@@ -1,0 +1,66 @@
+# =============================================================================
+# Experiment 2: Optimized 4B config for fast training (~30-40h/epoch)
+# Config for full training on Vast.ai (2x RTX 5090)
+# Launch: torchrun --nproc_per_node=2 train.py --config configs/exp2_v0.1_optimized4b_2_5090.yaml
+# =============================================================================
+
+# --- General Hub & Logging ---
+hub_model_id: "Vladimirlv/ru-promptriever-v0.2-optimized4b"
+wandb_project: "ru-promptriever"
+run_name: "exp2_v0.1_optimized4b"
+output_dir: "./output_exp2_v0.1_optimized4b"
+
+# --- Model ---
+model_name_or_path: "Qwen/Qwen3-4B"
+attn_implementation: "sdpa"
+torch_dtype: "bfloat16"
+
+# --- LoRA Configuration ---
+lora_r: 32
+lora_alpha: 64
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+
+# --- Data ---
+train_data_path: "hf://datasets/Vladimirlv/ru-promptriever-dataset-v0.1/train.parquet"
+eval_data_path: "hf://datasets/Vladimirlv/ru-promptriever-dataset-v0.1/val.parquet"
+instruct_only: true                    # Keep only has_instruction=True rows (~500k instead of ~1M)
+num_negatives: 7                       # Total: 3 instruct-negatives + 4 hard-negatives
+num_instruct_negatives: 3              # Exactly 3 instruction_negative passages per query
+max_len_query: 304
+max_len_passage: 256
+
+# --- GradCache ---
+# With 7 negatives (8 passages per query), chunk size of 16 = 128 passages per chunk.
+# If OOM — lower to 8 (64 passages per chunk).
+gc_chunk_size: 16
+
+# --- Training ---
+# Effective batch size = per_device × accum × num_gpus = 8 × 8 × 2 = 128
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 8
+
+tf32: true
+num_train_epochs: 1
+max_steps: -1
+learning_rate: 1.0e-4
+warmup_steps: 100
+fp16: false
+bf16: true
+load_in_4bit: false
+evaluation_strategy: "steps"
+eval_steps: 500
+logging_steps: 1
+save_strategy: "steps"
+save_steps: 500
+push_to_hub: true
+gradient_checkpointing: false          # Disabled — 4B model + 7 negs fits in 32GB without it
+dataloader_num_workers: 4
+temperature: 0.01
+
+# --- Logging Auth ---
+report_to: "wandb"
+wandb_key: null
