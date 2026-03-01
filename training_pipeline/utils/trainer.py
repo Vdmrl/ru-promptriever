@@ -71,9 +71,11 @@ class EncoderWrapper(nn.Module):
 
         # Memory Optimization:
         # 1. We don't need all 33 hidden states for pooling (saves ~3.6GB).
-        # 2. We don't need the massive vocabulary lm_head (152064) to predict words
-        #    since we only want embeddings. Passing through it wastes ~4.8GB per chunk.
-        kwargs.pop("output_hidden_states", None)
+        # 2. We don't need KV caches for past generated tokens (saves huge VRAM per layer).
+        # 3. We absolutely must return dicts to safely extract logits later.
+        kwargs["output_hidden_states"] = False
+        kwargs["use_cache"] = False
+        kwargs["return_dict"] = True
 
         target_engine = self.model
         while target_engine is not None and "lm_head" not in getattr(
