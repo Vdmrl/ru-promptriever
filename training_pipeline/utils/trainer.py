@@ -80,43 +80,43 @@ class EncoderWrapper(nn.Module):
         target_engine = self.model
         owner_of_lm_head = None
 
+        # When using PEFT/LoRA, the layer structure gets aggressively rewritten.
+        # Instead of traversing the tree blindly, we can directly find the CausalLM base.
+        # It's usually accessible via `.base_model.model` or similar.
+        # PyTorch keeps track of ALL child modules via `.named_modules()`.
+
         import sys, os
 
         rank = os.environ.get("LOCAL_RANK", "0")
 
-        if rank == "0":
-            print(f"\n[DEBUG] START TRAVERSAL. target_engine: {type(target_engine)}")
-
-        while target_engine is not None:
-            if rank == "0":
-                print(
-                    f"[DEBUG] Visit: {type(target_engine)} => Modules: {list(getattr(target_engine, '_modules', {}).keys())}"
-                )
-
-            # Check the physical module dictionary to bypass PeftModel __getattr__ proxies
-            if "lm_head" in getattr(target_engine, "_modules", {}):
-                owner_of_lm_head = target_engine
+        # A bulletproof way to find the exact layer that OWNS "lm_head":
+        for name, module in self.model.named_modules():
+            if "lm_head" in module._modules:
+                owner_of_lm_head = module
                 if rank == "0":
-                    print(f"[DEBUG] -> FOUND lm_head in {type(target_engine)}!")
+                    print(
+                        f"[DEBUG] Found exact owner via named_modules at '{name}'! Type: {type(owner_of_lm_head)}"
+                    )
                 break
 
-            # Traverse wrappers
-            if hasattr(target_engine, "module"):
-                target_engine = target_engine.module
-            elif (
-                hasattr(target_engine, "base_model")
-                and target_engine.base_model is not target_engine
-            ):
-                target_engine = target_engine.base_model
-            elif (
-                hasattr(target_engine, "model")
-                and target_engine.model is not target_engine
-            ):
-                target_engine = getattr(target_engine, "model")
-            else:
-                if rank == "0":
-                    print(f"[DEBUG] -> DEAD END at {type(target_engine)}")
-                break
+        # Fallback for some strange Peft configurations where lm_head is a direct attribute
+        # but not registered as a submodule of any traceable parent.
+        if owner_of_lm_head is None:
+            # Try exploring standard wrapper names
+            curr = self.model
+            while curr is not None:
+                if "lm_head" in getattr(curr, "_modules", {}):
+                    owner_of_lm_head = curr
+                    break
+                if hasattr(curr, "base_model") and curr.base_model is not curr:
+                    # In Qwen+LoRA, base_model is LoraModel, its model is Qwen3ForCausalLM
+                    curr = curr.base_model
+                elif hasattr(curr, "model") and curr.model is not curr:
+                    curr = curr.model
+                elif hasattr(curr, "module"):
+                    curr = curr.module
+                else:
+                    break
 
         # Temporarily replace lm_head with Identity to bypass the massive linear projection
         # without breaking DDP autograd hooks.
