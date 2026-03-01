@@ -146,30 +146,16 @@ class RetrieverGradCache(GradCache):
         if has_ddp:
             model.model = original_model.module
 
-        # Find the underlying HuggingFace model
-        hf_model = model.model
-        while True:
-            if hasattr(hf_model, "module"):
-                hf_model = hf_model.module
-            elif (
-                hasattr(hf_model, "base_model") and hf_model.base_model is not hf_model
-            ):
-                hf_model = hf_model.base_model
-            elif hasattr(hf_model, "model") and hf_model.model is not hf_model:
-                hf_model = getattr(hf_model, "model")
-            else:
-                break
-
-        was_gc_enabled = False
-        if hasattr(hf_model, "is_gradient_checkpointing"):
-            was_gc_enabled = hf_model.is_gradient_checkpointing
-        elif hasattr(hf_model, "gradient_checkpointing"):
-            was_gc_enabled = hf_model.gradient_checkpointing
-
-        if was_gc_enabled and hasattr(hf_model, "gradient_checkpointing_disable"):
-            hf_model.gradient_checkpointing_disable()
-        elif was_gc_enabled:
-            hf_model.gradient_checkpointing = False
+        # Recursively find any module with gradient_checkpointing and disable it
+        gc_modules = []
+        for m in model.modules():
+            gc_flag = getattr(m, "gradient_checkpointing", False)
+            if gc_flag is True:
+                try:
+                    m.gradient_checkpointing = False
+                    gc_modules.append(m)
+                except Exception:
+                    pass
 
         with torch.no_grad():
             for x in model_inputs:
@@ -177,10 +163,12 @@ class RetrieverGradCache(GradCache):
                 y = self.model_call(model, x)
                 model_reps.append(self.get_reps(y))
 
-        if was_gc_enabled and hasattr(hf_model, "gradient_checkpointing_enable"):
-            hf_model.gradient_checkpointing_enable()
-        elif was_gc_enabled:
-            hf_model.gradient_checkpointing = True
+        # Re-enable
+        for m in gc_modules:
+            try:
+                m.gradient_checkpointing = True
+            except Exception:
+                pass
 
         if has_ddp:
             model.model = original_model

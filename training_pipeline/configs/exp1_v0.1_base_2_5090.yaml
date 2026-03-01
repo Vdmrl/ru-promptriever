@@ -38,7 +38,7 @@ max_len_passage: 256
 # --- GradCache ---
 # gc_chunk_size = physical sub-batch that fits in one forward pass.
 # Each "virtual" batch element = 1+num_negatives=31 passages → keep small enough.
-gc_chunk_size: 4                       # 4 × 31 = 124 passages per chunk; safe for 24GB VRAM
+gc_chunk_size: 2                       # 2 × 31 = 62 passages per chunk; to avoid bitsandbytes cuBLAS bugs
 
 # --- Training ---
 # Effective batch size = per_device × accum × num_gpus = 64 × 1 × 2 = 128
