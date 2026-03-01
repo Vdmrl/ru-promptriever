@@ -52,6 +52,7 @@ learning_rate: 1.0e-4
 warmup_steps: 100
 fp16: false
 bf16: true
+load_in_4bit: false
 evaluation_strategy: "steps"
 eval_steps: 500                        # Evaluate every N steps
 logging_steps: 10

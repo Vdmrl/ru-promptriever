@@ -57,22 +57,28 @@ def build_model(cfg: dict):
 
     torch_dtype = getattr(torch, torch_dtype_str, torch.float16)
 
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype=torch_dtype,
-    )
+    use_4bit = cfg.get("load_in_4bit", True)
+    if use_4bit:
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch_dtype,
+        )
+        quantization_kwargs = {"quantization_config": bnb_config}
+    else:
+        quantization_kwargs = {}
 
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        quantization_config=bnb_config,
         device_map={"": int(os.environ.get("LOCAL_RANK", 0))},
         trust_remote_code=True,
         attn_implementation=attn_impl,
         dtype=torch_dtype,
+        **quantization_kwargs,
     )
-    model = prepare_model_for_kbit_training(model)
+    if use_4bit:
+        model = prepare_model_for_kbit_training(model)
 
     peft_config = LoraConfig(
         r=cfg.get("lora_r", 16),
