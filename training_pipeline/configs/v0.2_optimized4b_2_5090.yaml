@@ -34,9 +34,9 @@ max_len_query: 304
 max_len_passage: 256
 
 # --- GradCache ---
-# With 7 negatives (8 passages per query), chunk size of 16 = 128 passages per chunk.
-# If OOM — lower to 8 (64 passages per chunk).
-gc_chunk_size: 16
+# With 7 negatives (8 passages per query), chunk size of 8 = 64 passages per chunk.
+# Lowered from 16 to 8 to fix CUDA OutOfMemoryError
+gc_chunk_size: 8
 
 # --- Training ---
 # Effective batch size = per_device × accum × num_gpus = 8 × 8 × 2 = 128
