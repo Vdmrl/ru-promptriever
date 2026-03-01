@@ -1,0 +1,72 @@
+# =============================================================================
+# Experiment 1: Optimized baseline mimicking Promptriever Appendix B specs
+# Config for full training on Vast.ai (2x RTX 5090)
+# Launch: deepspeed --num_gpus=2 train.py --config configs/exp1_v0.1_optimized_2_5090.yaml
+# =============================================================================
+
+# --- General Hub & Logging ---
+hub_model_id: "Vladimirlv/ru-promptriever-v0.1-optimized"
+wandb_project: "ru-promptriever"
+run_name: "exp1_v0.1_optimized"        # Used for Wandb run name
+output_dir: "./output_exp1_v0.1_optimized"
+
+# --- Model ---
+model_name_or_path: "Qwen/Qwen3-8B"
+attn_implementation: "sdpa"
+torch_dtype: "bfloat16"
+
+# --- LoRA / QLoRA Configuration ---
+lora_r: 32
+lora_alpha: 64            
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# --- Data ---
+train_data_path: "hf://datasets/Vladimirlv/ru-promptriever-dataset-v0.1/train.parquet"
+eval_data_path: "hf://datasets/Vladimirlv/ru-promptriever-dataset-v0.1/val.parquet"
+
+# From Promptriever paper, Appendix B (Line 806):
+# "a train group size of 16" -> this means 1 positive + 15 negatives.
+num_negatives: 15                      
+max_len_query: 304                     
+max_len_passage: 256
+
+# --- GradCache ---
+# gc_chunk_size = physical sub-batch that fits in one forward pass.
+# With 15 negatives (16 passages per query), chunk size of 8 = 128 passages. 
+# This matches the physical batch size of the Promptriever paper authors roughly.
+gc_chunk_size: 4                       
+
+# --- Training ---
+# From Promptriever paper, Appendix B (Line 807):
+# "an effective batch size of 128 (4 GPUs, 8 per device with a 4 accumulation steps)"
+# Since you have 2 GPUs, we match 128 by: 8 per_device * 8 accum * 2 gpus = 128.
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 8         
+
+num_train_epochs: 1
+max_steps: -1                          
+learning_rate: 1.0e-4
+warmup_steps: 100
+fp16: false
+bf16: true
+load_in_4bit: false                    # Pure Bfloat16 LoRA to unlock full GPU speed
+evaluation_strategy: "steps"
+eval_steps: 500                        
+logging_steps: 1                       
+save_strategy: "steps"
+save_steps: 500
+push_to_hub: true                      
+gradient_checkpointing: true
+dataloader_num_workers: 4
+temperature: 0.01
+
+# --- Logging Auth ---
+report_to: "wandb"
+wandb_key: null
