@@ -69,8 +69,47 @@ class EncoderWrapper(nn.Module):
         """CausalLM forward -> last-token pool -> L2 normalize."""
         attention_mask = kwargs.get("attention_mask")
 
-        outputs = self.model(**kwargs, output_hidden_states=True)
-        last_hidden = outputs.hidden_states[-1]
+        # Memory Optimization:
+        # 1. We don't need all 33 hidden states for pooling (saves ~3.6GB).
+        # 2. We don't need the massive vocabulary lm_head (152064) to predict words
+        #    since we only want embeddings. Passing through it wastes ~4.8GB per chunk.
+        kwargs.pop("output_hidden_states", None)
+
+        base_engine = self.model
+        while (
+            hasattr(base_engine, "module")
+            or hasattr(base_engine, "model")
+            or hasattr(base_engine, "base_model")
+        ):
+            if hasattr(base_engine, "lm_head"):
+                break
+            if hasattr(base_engine, "module"):
+                base_engine = base_engine.module
+            elif (
+                hasattr(base_engine, "base_model")
+                and base_engine.base_model is not base_engine
+            ):
+                base_engine = base_engine.base_model
+            elif hasattr(base_engine, "model") and base_engine.model is not base_engine:
+                base_engine = getattr(base_engine, "model")
+            else:
+                break
+
+        # Temporarily replace lm_head with Identity to bypass the massive linear projection
+        # without breaking DDP autograd hooks.
+        original_lm_head = getattr(base_engine, "lm_head", None)
+        if original_lm_head is not None:
+            base_engine.lm_head = nn.Identity()
+
+        try:
+            # For CausalLM without output_hidden_states, outputs.logits IS the final hidden state
+            # because we replaced the lm_head projection with an Identity pass-through!
+            outputs = self.model(**kwargs)
+            last_hidden = outputs.logits
+        finally:
+            # Restore the real head
+            if original_lm_head is not None:
+                base_engine.lm_head = original_lm_head
 
         if attention_mask is not None:
             reps = _last_token_pool(last_hidden, attention_mask)
