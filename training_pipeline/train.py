@@ -115,7 +115,29 @@ def build_model(cfg: dict):
         bias="none",
         task_type="CAUSAL_LM",
     )
-    model = get_peft_model(model, peft_config)
+
+    # Check if we should resume from Hub
+    hub_model_id = cfg.get("hub_model_id")
+    if hub_model_id:
+        from huggingface_hub import HfApi
+
+        try:
+            api = HfApi()
+            api.model_info(hub_model_id)
+            print(
+                f"[OPTIMIZATION] Found existing model {hub_model_id} on HuggingFace Hub. Resuming adapters from it."
+            )
+            from peft import PeftModel
+
+            model = PeftModel.from_pretrained(model, hub_model_id, is_trainable=True)
+        except Exception:
+            print(
+                f"[OPTIMIZATION] No existing model found at {hub_model_id} on HuggingFace Hub. Initializing new LoRA adapters."
+            )
+            model = get_peft_model(model, peft_config)
+    else:
+        model = get_peft_model(model, peft_config)
+
     model.print_trainable_parameters()
 
     return model
@@ -221,7 +243,48 @@ def train(cfg: dict) -> None:
 
     # 7. Train
     print("[train] Starting training...")
-    trainer.train()
+
+    # Setup resume_from_checkpoint logic
+    resume_from_checkpoint = False
+
+    # 1. Check local output dir
+    if os.path.exists(training_args.output_dir):
+        import glob
+
+        checkpoints = glob.glob(os.path.join(training_args.output_dir, "checkpoint-*"))
+        if len(checkpoints) > 0:
+            resume_from_checkpoint = True
+            print(
+                f"[train] Found local checkpoint. Resuming from {training_args.output_dir}."
+            )
+
+    # 2. If nothing local, check if the model exists on HF Hub (handled in build_model),
+    # but we ALSO need the optimizer states which are saved as checkpoints on the Hub.
+    hub_model_id = cfg.get("hub_model_id")
+    if not resume_from_checkpoint and hub_model_id:
+        from huggingface_hub import HfApi, snapshot_download
+
+        try:
+            api = HfApi()
+            info = api.model_info(hub_model_id)
+
+            # Check if there's a checkpoint-* folder in the repo
+            has_checkpoint = any(
+                "checkpoint" in sibling.rfilename for sibling in info.siblings
+            )
+            if has_checkpoint:
+                print(
+                    f"[train] Found checkpoints on HF Hub ({hub_model_id}). Downloading to resume..."
+                )
+                os.makedirs(training_args.output_dir, exist_ok=True)
+                snapshot_download(
+                    repo_id=hub_model_id, local_dir=training_args.output_dir
+                )
+                resume_from_checkpoint = True
+        except Exception:
+            pass  # No repo or no checkpoints
+
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
     # 8. Save
     trainer.save_model()
