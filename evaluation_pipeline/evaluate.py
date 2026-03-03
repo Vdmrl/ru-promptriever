@@ -334,7 +334,7 @@ def evaluate_dense_custom(
 # ---------------------------------------------------------------------------
 
 
-class CausalLMRetrieverWithInstruction:
+class CausalLMRetrieverWithInstruction(mteb.EncoderProtocol):
     """Wrapper that injects a generic instruction into queries for MTEB.
 
     MTEB calls model.encode(sentences, prompt_name="query") for queries.

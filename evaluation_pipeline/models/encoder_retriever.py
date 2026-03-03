@@ -10,6 +10,7 @@ import logging
 from typing import List, Optional
 
 import numpy as np
+from mteb import EncoderProtocol
 from sentence_transformers import SentenceTransformer
 
 from .base import BaseRetriever
@@ -17,7 +18,7 @@ from .base import BaseRetriever
 logger = logging.getLogger(__name__)
 
 
-class EncoderRetriever(BaseRetriever):
+class EncoderRetriever(EncoderProtocol, BaseRetriever):
     """Wrapper for Encoder-Only models via sentence-transformers."""
 
     def __init__(
