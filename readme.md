@@ -98,17 +98,17 @@ The `evaluation_pipeline/` directory contains a full benchmarking suite to compa
 
 ### Running the Evaluation
 
-All settings (models, datasets, batch sizes) are configured in `configs/eval_config.yaml`.
+All settings (models, datasets, batch sizes) are configured in `configs/baseline_qwen3-4b.yaml`.
 
 ```bash
 # 1. Smoke test (5 queries per model) to ensure no memory errors:
-python evaluate.py --config configs/eval_config.yaml --max-queries 5
+python evaluate.py --config configs/baseline_qwen3-4b.yaml --max-queries 5
 
 # 2. Full evaluation (all models × all datasets):
-python evaluate.py --config configs/eval_config.yaml
+python evaluate.py --config configs/baseline_qwen3-4b.yaml
 
 # 3. Skip existing results if resuming an interrupted run:
-python evaluate.py --config configs/eval_config.yaml --skip-existing
+python evaluate.py --config configs/baseline_qwen3-4b.yaml --skip-existing
 ```
 
 ### Uploading Results to Hugging Face

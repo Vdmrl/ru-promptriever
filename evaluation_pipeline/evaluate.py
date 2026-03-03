@@ -425,7 +425,7 @@ def main():
     parser.add_argument(
         "--config",
         type=str,
-        default="configs/eval_config.yaml",
+        default="configs/baseline_qwen3-4b.yaml",
         help="Path to evaluation config file.",
     )
     parser.add_argument(
