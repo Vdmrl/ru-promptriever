@@ -223,6 +223,46 @@ def compute_retrieval_metrics(
 # ---------------------------------------------------------------------------
 
 
+def _extract_task_data(task, split="test"):
+    """Extract corpus/queries/relevant_docs from both custom and MTEB built-in tasks.
+
+    Our custom tasks (synthetic_test, mfollowir) set task.corpus/queries/relevant_docs.
+    MTEB 2.10+ built-in tasks use an internal DatasetDict — data is in task.dataset.
+    """
+    # Custom tasks: set self.corpus / self.queries / self.relevant_docs in load_data()
+    if hasattr(task, "corpus") and task.corpus is not None:
+        corpus = dict(task.corpus[split])
+        queries = dict(task.queries[split])
+        relevant_docs = dict(task.relevant_docs[split])
+        return corpus, queries, relevant_docs
+
+    # MTEB 2.10+ built-in tasks: data stored in task.dataset (DatasetDict)
+    # Schema: corpus columns: _id, text, title; queries: _id, text; qrels: query-id, corpus-id, score
+    if hasattr(task, "dataset") and task.dataset is not None:
+        ds = task.dataset
+        corpus = {
+            row["_id"]: {"text": row.get("text", ""), "title": row.get("title", "")}
+            for row in ds.get("corpus", ds.get("test", []))
+        }
+        queries = {row["_id"]: row["text"] for row in ds.get("queries", [])}
+        # qrels are split-specific
+        qrels_split = ds.get(split, ds.get("test", []))
+        relevant_docs = {}
+        for row in qrels_split:
+            q_id = str(row.get("query-id", row.get("query_id", "")))
+            c_id = str(row.get("corpus-id", row.get("corpus_id", "")))
+            score = int(row.get("score", 1))
+            if q_id not in relevant_docs:
+                relevant_docs[q_id] = {}
+            relevant_docs[q_id][c_id] = score
+        return corpus, queries, relevant_docs
+
+    raise ValueError(
+        f"Cannot extract data from task {type(task).__name__}: "
+        "task has neither .corpus nor .dataset attributes after load_data()."
+    )
+
+
 def evaluate_bm25(
     model: BM25Retriever,
     task,
@@ -233,9 +273,7 @@ def evaluate_bm25(
     task.load_data()
 
     split = "test"
-    corpus = task.corpus[split]
-    queries = dict(task.queries[split])
-    relevant_docs = task.relevant_docs[split]
+    corpus, queries, relevant_docs = _extract_task_data(task, split)
 
     if max_queries:
         query_ids = list(queries.keys())[:max_queries]
@@ -272,9 +310,7 @@ def evaluate_dense_custom(
     task.load_data()
 
     split = "test"
-    corpus = task.corpus[split]
-    queries = dict(task.queries[split])
-    relevant_docs = task.relevant_docs[split]
+    corpus, queries, relevant_docs = _extract_task_data(task, split)
 
     # Adjust queries for model type
     queries = prepare_queries_for_model(

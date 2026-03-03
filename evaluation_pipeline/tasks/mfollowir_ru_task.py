@@ -141,14 +141,38 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
             import ir_datasets
 
             logger.info("Loading NeuCLIR-2022 Russian corpus via ir_datasets...")
-            ds = ir_datasets.load("neuclir/1/ru")
 
-            corpus = {}
-            for doc in ds.docs_iter():
-                corpus[doc.doc_id] = {
-                    "text": doc.text,
-                    "title": doc.title if hasattr(doc, "title") else "",
-                }
+            def _load_ir():
+                ds = ir_datasets.load("neuclir/1/ru")
+                corpus = {}
+                for doc in ds.docs_iter():
+                    corpus[doc.doc_id] = {
+                        "text": doc.text,
+                        "title": doc.title if hasattr(doc, "title") else "",
+                    }
+                return corpus
+
+            # Retry once if the cached download is corrupted (e.g. interrupted by Ctrl+C)
+            try:
+                corpus = _load_ir()
+            except Exception as e:
+                if (
+                    "HashVerificationError" in type(e).__name__
+                    or "hash" in str(e).lower()
+                ):
+                    logger.warning(
+                        f"NeuCLIR download appears corrupted ({e}). "
+                        "Deleting cached file and retrying..."
+                    )
+                    import shutil
+
+                    ir_cache = os.path.expanduser("~/.ir_datasets/downloads")
+                    if os.path.isdir(ir_cache):
+                        shutil.rmtree(ir_cache)
+                        logger.info(f"Cleared {ir_cache}, retrying download...")
+                    corpus = _load_ir()
+                else:
+                    raise
 
             # Cache to disk for future runs
             logger.info(f"Caching corpus to {corpus_path}")
