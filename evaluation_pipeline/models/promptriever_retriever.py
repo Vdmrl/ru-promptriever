@@ -1,17 +1,13 @@
 """
-CausalLM retriever wrapper for MTEB.
+PrompTriever-style retriever (Retrieval via Language Models).
 
-For Promptriever-style models (samaya-ai/promptriever-llama3.1-8b-v1,
-Vladimirlv/ru-promptriever-qwen3-4b).
+Unified wrapper for instruction-following retrieval models:
+  - samaya-ai/promptriever-llama3.1-8b-v1  (PEFT/LoRA over LLaMA 3.1)
+  - Vladimirlv/ru-promptriever-qwen3-4b     (our trained model, merged weights)
 
-Supports both:
-- PEFT/LoRA models: loaded via PeftModel + merged (Promptriever)
-- Plain CausalLM models: loaded via AutoModelForCausalLM
-
-Pooling: last non-padding token (EOS pooling) — identical to the
-_last_token_pool function used during training.
-
-Query format: "{prefix}{query}" — prefix from config (e.g. "query:  " for Promptriever).
+Supports both PEFT/LoRA and plain CausalLM checkpoints (auto-detected).
+Pooling: last non-padding token (EOS pooling) — same as training.
+Query format: "{prefix}{query}" where prefix comes from config.
 """
 
 import logging

@@ -29,7 +29,7 @@ import mteb
 import numpy as np
 
 from models.bm25_retriever import BM25Retriever
-from models.causal_retriever import CausalLMRetriever
+from models.promptriever_retriever import CausalLMRetriever
 from models.encoder_retriever import EncoderRetriever
 from models.giga_embedding_retriever import GigaEmbeddingRetriever
 from models.qwen3_embedding_retriever import Qwen3EmbeddingRetriever
