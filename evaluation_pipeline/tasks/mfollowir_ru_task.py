@@ -69,21 +69,19 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
         if self.data_loaded:
             return
 
-        # --- Load queries & relevance judgments from rus_map_final.jsonl ---
+        # --- Load queries from rus_map_final.jsonl ---
         jsonl_path = os.path.join(self.data_dir, "rus_map_final.jsonl")
         if not os.path.exists(jsonl_path):
             self._download_mfollowir()
 
-        logger.info(f"Loading mFollowIR-RU from {jsonl_path}")
+        logger.info(f"Loading mFollowIR-RU queries from {jsonl_path}")
         queries = {}
-        relevant_docs = defaultdict(dict)
-
         with open(jsonl_path, "r", encoding="utf-8") as f:
             for line in f:
                 record = json.loads(line.strip())
                 query_id = str(record["query_id"])
-                query_text = record.get("query", "")
-                instruction = record.get("instruction", "")
+                query_text = record.get("ht_text", "")
+                instruction = record.get("instruction_changed", "")
 
                 # Format: "{query} {instruction}" — same as Promptriever
                 if instruction:
@@ -93,15 +91,73 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
 
                 queries[query_id] = full_query
 
-                # Relevance judgments
-                for doc_id, rel_score in record.get("relevance", {}).items():
-                    relevant_docs[query_id][str(doc_id)] = int(rel_score)
+        # --- Load correct QRELS from mFollowIR-rus-cl (qrels_changed) ---
+        qrels_path = os.path.join(self.data_dir, "qrels_changed_test.jsonl")
+        if not os.path.exists(qrels_path):
+            from huggingface_hub import hf_hub_download
 
-        # --- Load NeuCLIR corpus ---
-        corpus = self._load_neuclir_corpus()
+            logger.info("Downloading true qrels for mFollowIR...")
+            try:
+                hf_hub_download(
+                    repo_id="jhu-clsp/mFollowIR-rus-cl",
+                    filename="qrels_changed/test.jsonl",
+                    repo_type="dataset",
+                    local_dir=self.data_dir,
+                )
+                import shutil
+
+                shutil.move(
+                    os.path.join(self.data_dir, "qrels_changed", "test.jsonl"),
+                    qrels_path,
+                )
+            except Exception as e:
+                logger.error(f"Failed to download qrels: {e}")
+                raise
+
+        relevant_docs = defaultdict(dict)
+        required_doc_ids = set()
+        with open(qrels_path, "r", encoding="utf-8") as f:
+            for line in f:
+                record = json.loads(line.strip())
+                q_id = str(record["query-id"])
+                c_id = str(record["corpus-id"])
+                score = int(record["score"])
+                relevant_docs[q_id][c_id] = score
+                # Even if score <= 0, we should ensure the document is in the corpus
+                # for hard negative evaluation
+                required_doc_ids.add(c_id)
+
+        # --- Load NeuCLIR corpus and limit to 100k docs ---
+        full_corpus = self._load_neuclir_corpus()
+
+        # We need to drop corpus size down from 4.6M to 100k to fit in 12h compute budget
+        # We MUST include all docs from qrels as well as random noise.
+        corpus = {}
+        MAX_DOCS = 100000
+
+        # 1. Add all required docs first
+        for doc_id in required_doc_ids:
+            if doc_id in full_corpus:
+                corpus[doc_id] = full_corpus[doc_id]
+            else:
+                logger.warning(f"Required doc {doc_id} not found in corpus!")
+
+        # 2. Fill the rest up to MAX_DOCS with random docs
+        import random
+
+        remaining_slots = MAX_DOCS - len(corpus)
+        if remaining_slots > 0:
+            available_docs = list(full_corpus.keys() - corpus.keys())
+            # Sample deterministically to ensure reproducibility
+            random.seed(42)
+            sampled_docs = random.sample(
+                available_docs, min(remaining_slots, len(available_docs))
+            )
+            for doc_id in sampled_docs:
+                corpus[doc_id] = full_corpus[doc_id]
 
         logger.info(
-            f"Loaded mFollowIR-RU: {len(corpus)} docs, "
+            f"Loaded mFollowIR-RU: {len(corpus)} docs (TRUNCATED from {len(full_corpus)} for speed), "
             f"{len(queries)} queries, "
             f"{sum(len(v) for v in relevant_docs.values())} judgments"
         )
