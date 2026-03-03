@@ -84,7 +84,7 @@ datasets:
     type: "rumteb"
     # Built-in MTEB task names for Russian retrieval
     task_names:
-      - "RiaNewsRetrieval"
+      # - "RiaNewsRetrieval"           # DISABLED: 704k docs, niche news domain
       - "RuBQRetrieval"
       - "MIRACLRetrieval"
     metrics:
