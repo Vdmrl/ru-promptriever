@@ -91,8 +91,10 @@ class EncoderRetriever(EncoderProtocol, BaseRetriever):
             sentences = [f"{self.passage_prefix}{s}" for s in sentences]
 
         # Encode in explicit batches to avoid SentenceTransformers 5.x sort bug
+        from tqdm import trange
+
         all_embeddings = []
-        for start in range(0, len(sentences), batch_size):
+        for start in trange(0, len(sentences), batch_size, desc="Encoding"):
             batch = sentences[start : start + batch_size]
             embs = self.model.encode(
                 batch,
