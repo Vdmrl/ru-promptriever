@@ -125,12 +125,31 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
     @torch.no_grad()
     def encode(
         self,
-        sentences: List[str],
+        sentences,
         batch_size: int = 8,
         prompt_name: Optional[str] = None,
         **kwargs,
     ) -> np.ndarray:
         """Encode sentences using last-token pooling + L2 normalization."""
+        # MTEB 2.10+ passes sentences as a DataLoader — extract raw strings
+        from torch.utils.data import DataLoader as TorchDataLoader
+
+        if isinstance(sentences, TorchDataLoader):
+            texts = []
+            for batch in sentences:
+                if isinstance(batch, dict):
+                    batch_texts = batch.get("text", batch.get("sentence", []))
+                    texts.extend(
+                        batch_texts
+                        if isinstance(batch_texts, list)
+                        else list(batch_texts)
+                    )
+                elif isinstance(batch, (list, tuple)):
+                    texts.extend(batch)
+                else:
+                    texts.append(str(batch))
+            sentences = texts
+
         # Apply query/passage prefix if configured (e.g. Promptriever uses "query:  ")
         if prompt_name == "query" and self.query_prefix:
             sentences = [f"{self.query_prefix}{s}" for s in sentences]

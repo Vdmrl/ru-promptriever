@@ -56,31 +56,51 @@ class EncoderRetriever(EncoderProtocol, BaseRetriever):
 
     def encode(
         self,
-        sentences: List[str],
+        sentences,
         batch_size: int = 64,
         prompt_name: Optional[str] = None,
         **kwargs,
     ) -> np.ndarray:
         """Encode sentences with optional query/passage prefix.
 
-        Args:
-            sentences: List of texts to encode.
-            batch_size: Batch size for encoding.
-            prompt_name: If "query", prepend query_prefix; if "passage",
-                         prepend passage_prefix. MTEB passes this automatically.
-
-        Returns:
-            np.ndarray of shape [len(sentences), hidden_dim], L2-normalized.
+        Accepts both list[str] (our custom eval) and DataLoader (MTEB 2.10+).
         """
+        # MTEB 2.10+ passes sentences as a DataLoader for efficiency.
+        # Detect and extract raw strings from it.
+        from torch.utils.data import DataLoader as TorchDataLoader
+
+        if isinstance(sentences, TorchDataLoader):
+            texts = []
+            for batch in sentences:
+                if isinstance(batch, dict):
+                    batch_texts = batch.get("text", batch.get("sentence", []))
+                    texts.extend(
+                        batch_texts
+                        if isinstance(batch_texts, list)
+                        else list(batch_texts)
+                    )
+                elif isinstance(batch, (list, tuple)):
+                    texts.extend(batch)
+                else:
+                    texts.append(str(batch))
+            sentences = texts
+
         if prompt_name == "query" and self.query_prefix:
             sentences = [f"{self.query_prefix}{s}" for s in sentences]
         elif prompt_name == "passage" and self.passage_prefix:
             sentences = [f"{self.passage_prefix}{s}" for s in sentences]
 
-        embeddings = self.model.encode(
-            sentences,
-            batch_size=batch_size,
-            show_progress_bar=True,
-            normalize_embeddings=True,
+        # Encode in explicit batches to avoid SentenceTransformers 5.x sort bug
+        all_embeddings = []
+        for start in range(0, len(sentences), batch_size):
+            batch = sentences[start : start + batch_size]
+            embs = self.model.encode(
+                batch,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+            )
+            all_embeddings.append(embs)
+
+        return (
+            np.concatenate(all_embeddings, axis=0) if all_embeddings else np.array([])
         )
-        return embeddings
