@@ -58,18 +58,38 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
     )
 
     def load_data(self, **kwargs):
-        """Load corpus from test_corpus.parquet and queries/relevance from test.parquet."""
+        """Load corpus from test_corpus.parquet and queries/relevance from test.parquet.
+
+        Uses hf_hub_download to fetch only the specific files needed,
+        avoiding downloading the entire 11GB+ train split.
+        """
         if self.data_loaded:
             return
 
+        from huggingface_hub import hf_hub_download
+
         dataset_path = self.metadata.dataset["path"]
 
-        # --- Load full retrieval corpus from test_corpus.parquet ---
-        logger.info("Loading ru-promptriever corpus (test_corpus.parquet)...")
+        # --- Download only the two files we need ---
+        logger.info("Downloading test_corpus.parquet from HuggingFace...")
+        corpus_path = hf_hub_download(
+            repo_id=dataset_path,
+            filename="test_corpus.parquet",
+            repo_type="dataset",
+        )
+
+        logger.info("Downloading test.parquet from HuggingFace...")
+        test_path = hf_hub_download(
+            repo_id=dataset_path,
+            filename="test.parquet",
+            repo_type="dataset",
+        )
+
+        # --- Load corpus from test_corpus.parquet ---
         corpus_ds = hf_datasets.load_dataset(
-            dataset_path,
+            "parquet",
+            data_files={"test": corpus_path},
             split="test",
-            data_files={"test": "test_corpus.parquet"},
         )
         corpus = {}
         for row in corpus_ds:
@@ -81,11 +101,10 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
         logger.info(f"Corpus loaded: {len(corpus)} documents")
 
         # --- Load queries and relevance judgments from test.parquet ---
-        logger.info("Loading ru-promptriever test queries (test.parquet)...")
         query_ds = hf_datasets.load_dataset(
-            dataset_path,
+            "parquet",
+            data_files={"test": test_path},
             split="test",
-            data_files={"test": "test.parquet"},
         )
         queries = {}
         relevant_docs = defaultdict(dict)
@@ -97,13 +116,11 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
             has_instruction = row.get("has_instruction", False)
 
             if has_instruction and only_instruction:
-                # Instructed query: "{query} {instruction}"
                 inst_q_id = f"{q_id}-instruct"
                 queries[inst_q_id] = f"{only_query} {only_instruction}"
                 for passage in row.get("positive_passages", []) or []:
                     relevant_docs[inst_q_id][str(passage["docid"])] = 1
             else:
-                # Standard query (no instruction)
                 queries[q_id] = only_query
                 for passage in row.get("positive_passages", []) or []:
                     relevant_docs[q_id][str(passage["docid"])] = 1
