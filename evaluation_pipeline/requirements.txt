@@ -13,4 +13,3 @@ numpy>=1.24.0
 tqdm>=4.65.0
 accelerate>=0.25.0
 pytrec_eval>=0.5
-flash-attn>=2.0.0

@@ -43,7 +43,6 @@ class GigaEmbeddingRetriever(BaseRetriever):
             model_name_or_path,
             device=device,
             model_kwargs={
-                "attn_implementation": "flash_attention_2",
                 "torch_dtype": torch.bfloat16,
                 "trust_remote_code": True,
             },
