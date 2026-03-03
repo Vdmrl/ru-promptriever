@@ -44,7 +44,7 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
             "revision": "main",
         },
         type="Retrieval",
-        category="s2p",
+        category="p2p",
         modalities=["text"],
         eval_splits=["test"],
         eval_langs=["rus-Cyrl"],
@@ -58,7 +58,6 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
         dialect=[],
         sample_creation="found",
         bibtex_citation="",
-        descriptive_stats={},
     )
 
     def __init__(self, data_dir: str = _DEFAULT_DATA_DIR, **kwargs):

@@ -41,7 +41,7 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
             "revision": "main",
         },
         type="Retrieval",
-        category="s2p",
+        category="p2p",
         modalities=["text"],
         eval_splits=["test"],
         eval_langs=["rus-Cyrl"],
@@ -55,7 +55,6 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
         dialect=[],
         sample_creation="LM-generated and verified",
         bibtex_citation="",
-        descriptive_stats={},
     )
 
     def load_data(self, **kwargs):
