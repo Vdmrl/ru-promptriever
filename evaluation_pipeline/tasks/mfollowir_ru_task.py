@@ -127,13 +127,13 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
                 # for hard negative evaluation
                 required_doc_ids.add(c_id)
 
-        # --- Load NeuCLIR corpus and limit to 100k docs ---
+        # --- Load NeuCLIR corpus and limit to 50k docs ---
         full_corpus = self._load_neuclir_corpus()
 
-        # We need to drop corpus size down from 4.6M to 100k to fit in 12h compute budget
+        # We need to drop corpus size down from 4.6M to 50k to STRICTLY fit in 12h compute budget
         # We MUST include all docs from qrels as well as random noise.
         corpus = {}
-        MAX_DOCS = 100000
+        MAX_DOCS = 50000
 
         # 1. Add all required docs first
         for doc_id in required_doc_ids:
