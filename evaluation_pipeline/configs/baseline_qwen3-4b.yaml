@@ -35,9 +35,9 @@ models:
     query_prefix: ""
     passage_prefix: ""
 
-  - name: "promptriever-llama3.1-8b"
+  - name: "promptriever-mistral-7b"
     type: "causal_lm"
-    model_name_or_path: "samaya-ai/promptriever-llama3.1-8b-v1"
+    model_name_or_path: "samaya-ai/promptriever-mistral-v0.1-7b-v1"
     batch_size: 4
     max_length: 512
     # Promptriever uses double-space after prefix (as documented on HF model page)
