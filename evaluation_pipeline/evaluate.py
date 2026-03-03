@@ -223,38 +223,66 @@ def compute_retrieval_metrics(
 # ---------------------------------------------------------------------------
 
 
+def _hf_dataset_to_corpus(raw) -> Dict[str, dict]:
+    """Convert a HuggingFace Dataset or plain dict to {doc_id: {text, title}} format."""
+    if isinstance(raw, dict):
+        # Already in expected format: {doc_id: {text, title, ...}}
+        return raw
+    # HuggingFace Dataset: iterate rows, each row has _id/text/title columns
+    return {
+        str(row.get("_id", row.get("id", ""))): {
+            "text": row.get("text", ""),
+            "title": row.get("title", ""),
+        }
+        for row in raw
+    }
+
+
+def _hf_dataset_to_queries(raw) -> Dict[str, str]:
+    """Convert a HuggingFace Dataset or plain dict to {query_id: text} format."""
+    if isinstance(raw, dict):
+        return raw
+    return {str(row.get("_id", row.get("id", ""))): row.get("text", "") for row in raw}
+
+
+def _hf_dataset_to_qrels(raw) -> Dict[str, Dict[str, int]]:
+    """Convert a HuggingFace Dataset or plain dict to {q_id: {doc_id: score}} format."""
+    if isinstance(raw, dict):
+        return raw
+    result = {}
+    for row in raw:
+        q_id = str(row.get("query-id", row.get("query_id", "")))
+        c_id = str(row.get("corpus-id", row.get("corpus_id", "")))
+        score = int(row.get("score", 1))
+        if q_id not in result:
+            result[q_id] = {}
+        result[q_id][c_id] = score
+    return result
+
+
 def _extract_task_data(task, split="test"):
     """Extract corpus/queries/relevant_docs from both custom and MTEB built-in tasks.
 
-    Our custom tasks (synthetic_test, mfollowir) set task.corpus/queries/relevant_docs.
-    MTEB 2.10+ built-in tasks use an internal DatasetDict — data is in task.dataset.
+    Our custom tasks (synthetic_test, mfollowir) set task.corpus/queries/relevant_docs
+    as plain Python dicts.
+    MTEB 2.10+ built-in tasks set task.corpus/queries/relevant_docs as HuggingFace
+    Dataset objects — which must be iterated row-by-row.
     """
-    # Custom tasks: set self.corpus / self.queries / self.relevant_docs in load_data()
     if hasattr(task, "corpus") and task.corpus is not None:
-        corpus = dict(task.corpus[split])
-        queries = dict(task.queries[split])
-        relevant_docs = dict(task.relevant_docs[split])
+        corpus = _hf_dataset_to_corpus(task.corpus[split])
+        queries = _hf_dataset_to_queries(task.queries[split])
+        qrels_raw = task.relevant_docs[split]
+        # relevant_docs can be a plain dict already (both old and new MTEB)
+        relevant_docs = _hf_dataset_to_qrels(qrels_raw)
         return corpus, queries, relevant_docs
 
-    # MTEB 2.10+ built-in tasks: data stored in task.dataset (DatasetDict)
-    # Schema: corpus columns: _id, text, title; queries: _id, text; qrels: query-id, corpus-id, score
+    # MTEB 2.10+ fallback: data stored in task.dataset (DatasetDict)
     if hasattr(task, "dataset") and task.dataset is not None:
         ds = task.dataset
-        corpus = {
-            row["_id"]: {"text": row.get("text", ""), "title": row.get("title", "")}
-            for row in ds.get("corpus", ds.get("test", []))
-        }
-        queries = {row["_id"]: row["text"] for row in ds.get("queries", [])}
-        # qrels are split-specific
+        corpus = _hf_dataset_to_corpus(ds.get("corpus", ds.get("test", [])))
+        queries = _hf_dataset_to_queries(ds.get("queries", []))
         qrels_split = ds.get(split, ds.get("test", []))
-        relevant_docs = {}
-        for row in qrels_split:
-            q_id = str(row.get("query-id", row.get("query_id", "")))
-            c_id = str(row.get("corpus-id", row.get("corpus_id", "")))
-            score = int(row.get("score", 1))
-            if q_id not in relevant_docs:
-                relevant_docs[q_id] = {}
-            relevant_docs[q_id][c_id] = score
+        relevant_docs = _hf_dataset_to_qrels(qrels_split)
         return corpus, queries, relevant_docs
 
     raise ValueError(

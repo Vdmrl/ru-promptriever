@@ -136,45 +136,31 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
         if os.path.exists(corpus_path):
             return self._load_corpus_from_jsonl(corpus_path)
 
-        # Try ir_datasets
+        # Try HuggingFace datasets first — bypasses ir_datasets MD5 hash issues
         try:
-            import ir_datasets
+            import datasets as hf_datasets
 
-            logger.info("Loading NeuCLIR-2022 Russian corpus via ir_datasets...")
+            logger.info(
+                "Loading NeuCLIR-2022 Russian corpus via HuggingFace datasets..."
+            )
+            # neuclir/neuclir1 has a 'rus' config with 'docs' split
+            corpus_ds = hf_datasets.load_dataset(
+                "neuclir/neuclir1",
+                "rus",
+                split="docs",
+                trust_remote_code=True,
+            )
 
-            def _load_ir():
-                ds = ir_datasets.load("neuclir/1/ru")
-                corpus = {}
-                for doc in ds.docs_iter():
-                    corpus[doc.doc_id] = {
-                        "text": doc.text,
-                        "title": doc.title if hasattr(doc, "title") else "",
-                    }
-                return corpus
+            corpus = {}
+            for row in corpus_ds:
+                doc_id = str(row.get("doc_id", row.get("id", "")))
+                text = row.get("text", row.get("segment", ""))
+                title = row.get("title", "")
+                corpus[doc_id] = {"text": text, "title": title}
 
-            # Retry once if the cached download is corrupted (e.g. interrupted by Ctrl+C)
-            try:
-                corpus = _load_ir()
-            except Exception as e:
-                if (
-                    "HashVerificationError" in type(e).__name__
-                    or "hash" in str(e).lower()
-                ):
-                    logger.warning(
-                        f"NeuCLIR download appears corrupted ({e}). "
-                        "Deleting cached file and retrying..."
-                    )
-                    import shutil
+            logger.info(f"NeuCLIR corpus loaded: {len(corpus)} documents")
 
-                    ir_cache = os.path.expanduser("~/.ir_datasets/downloads")
-                    if os.path.isdir(ir_cache):
-                        shutil.rmtree(ir_cache)
-                        logger.info(f"Cleared {ir_cache}, retrying download...")
-                    corpus = _load_ir()
-                else:
-                    raise
-
-            # Cache to disk for future runs
+            # Cache to disk
             logger.info(f"Caching corpus to {corpus_path}")
             os.makedirs(os.path.dirname(corpus_path), exist_ok=True)
             with open(corpus_path, "w", encoding="utf-8") as f:
@@ -186,11 +172,35 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
 
             return corpus
 
-        except (ImportError, Exception) as e:
+        except Exception as e:
+            logger.warning(f"HF datasets loading failed ({e}), trying ir_datasets...")
+
+        # Fallback: ir_datasets (may have MD5 issues with outdated version)
+        try:
+            import ir_datasets
+
+            logger.info("Loading NeuCLIR-2022 Russian corpus via ir_datasets...")
+            ds = ir_datasets.load("neuclir/1/ru")
+            corpus = {}
+            for doc in ds.docs_iter():
+                corpus[doc.doc_id] = {
+                    "text": doc.text,
+                    "title": doc.title if hasattr(doc, "title") else "",
+                }
+
+            os.makedirs(os.path.dirname(corpus_path), exist_ok=True)
+            with open(corpus_path, "w", encoding="utf-8") as f:
+                for doc_id, doc_data in corpus.items():
+                    f.write(
+                        json.dumps({"doc_id": doc_id, **doc_data}, ensure_ascii=False)
+                        + "\n"
+                    )
+            return corpus
+
+        except Exception as e:
             logger.error(
                 f"Failed to load NeuCLIR corpus: {e}. "
-                f"Please install ir_datasets (`pip install ir-datasets`) "
-                f"or place neuclir_ru_corpus.jsonl in {self.data_dir}"
+                f"Place neuclir_ru_corpus.jsonl in {self.data_dir}"
             )
             raise
 
