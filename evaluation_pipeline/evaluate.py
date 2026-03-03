@@ -437,6 +437,27 @@ class CausalLMRetrieverWithInstruction(mteb.EncoderProtocol):
             sentences, batch_size=batch_size, prompt_name=prompt_name, **kwargs
         )
 
+    def similarity(self, e1, e2):
+        """Cosine similarity — required by MTEB search_wrappers."""
+        import torch
+
+        if not isinstance(e1, torch.Tensor):
+            e1 = torch.as_tensor(e1)
+        if not isinstance(e2, torch.Tensor):
+            e2 = torch.as_tensor(e2)
+        return torch.nn.functional.cosine_similarity(
+            e1.unsqueeze(1), e2.unsqueeze(0), dim=2
+        )
+
+    def similarity_pairwise(self, e1, e2):
+        import torch
+
+        if not isinstance(e1, torch.Tensor):
+            e1 = torch.as_tensor(e1)
+        if not isinstance(e2, torch.Tensor):
+            e2 = torch.as_tensor(e2)
+        return torch.nn.functional.cosine_similarity(e1, e2, dim=1)
+
 
 def evaluate_with_mteb(
     model,
@@ -633,7 +654,11 @@ def main():
         logger.info(f"Loading model: {model_name}")
         logger.info(f"{'=' * 60}")
 
-        model = load_model(model_cfg, config)
+        try:
+            model = load_model(model_cfg, config)
+        except Exception as e:
+            logger.error(f"✗ Failed to load model {model_name}: {e}")
+            continue
 
         for dataset_cfg in datasets_cfg:
             dataset_name = dataset_cfg["name"]
