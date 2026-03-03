@@ -181,16 +181,14 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         return np.concatenate(all_embeddings, axis=0)
 
     def similarity(self, e1, e2):
-        """Cosine similarity — required by MTEB search_wrappers."""
+        """Cosine similarity via dot product (embeddings are L2-normalized)."""
         import torch
 
         if not isinstance(e1, torch.Tensor):
             e1 = torch.as_tensor(e1)
         if not isinstance(e2, torch.Tensor):
             e2 = torch.as_tensor(e2)
-        return torch.nn.functional.cosine_similarity(
-            e1.unsqueeze(1), e2.unsqueeze(0), dim=2
-        )
+        return e1 @ e2.T
 
     def similarity_pairwise(self, e1, e2):
         import torch
@@ -199,4 +197,4 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
             e1 = torch.as_tensor(e1)
         if not isinstance(e2, torch.Tensor):
             e2 = torch.as_tensor(e2)
-        return torch.nn.functional.cosine_similarity(e1, e2, dim=1)
+        return (e1 * e2).sum(dim=1)
