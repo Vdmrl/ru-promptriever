@@ -136,27 +136,29 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
         if os.path.exists(corpus_path):
             return self._load_corpus_from_jsonl(corpus_path)
 
-        # Try HuggingFace datasets first — bypasses ir_datasets MD5 hash issues
+        # Download directly via HuggingFace Hub to bypass broken dataset scripts and outdated md5s
         try:
-            import datasets as hf_datasets
+            from huggingface_hub import hf_hub_download
+            import gzip
 
             logger.info(
-                "Loading NeuCLIR-2022 Russian corpus via HuggingFace datasets..."
+                "Downloading NeuCLIR-2022 jsonl directly via hf_hub_download..."
             )
-            # neuclir/neuclir1 has a 'default' config, and 'rus' is likely a split
-            # Let's use the explicit data files if the builder config is weird.
-            corpus_ds = hf_datasets.load_dataset(
-                "neuclir/neuclir1",
-                data_files={"rus": "data/rus-*.jsonl.gz"},
-                split="rus",
+            corpus_file = hf_hub_download(
+                repo_id="neuclir/neuclir1",
+                filename="data/rus-00000-of-00001.jsonl.gz",
+                repo_type="dataset",
             )
 
             corpus = {}
-            for row in corpus_ds:
-                doc_id = str(row.get("doc_id", row.get("id", "")))
-                text = row.get("text", row.get("segment", ""))
-                title = row.get("title", "")
-                corpus[doc_id] = {"text": text, "title": title}
+            with gzip.open(corpus_file, "rt", encoding="utf-8") as f:
+                for line in f:
+                    doc = json.loads(line)
+                    doc_id = str(doc.get("doc_id", doc.get("id", "")))
+                    corpus[doc_id] = {
+                        "text": doc.get("text", doc.get("segment", "")),
+                        "title": doc.get("title", ""),
+                    }
 
             logger.info(f"NeuCLIR corpus loaded: {len(corpus)} documents")
 
@@ -173,7 +175,7 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
             return corpus
 
         except Exception as e:
-            logger.warning(f"HF datasets loading failed ({e}), trying ir_datasets...")
+            logger.warning(f"Direct HF download failed ({e}), trying ir_datasets...")
 
         # Fallback: ir_datasets (may have MD5 issues with outdated version)
         try:

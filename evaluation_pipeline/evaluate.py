@@ -264,17 +264,48 @@ def _extract_task_data(task, split="test"):
     """Extract corpus/queries/relevant_docs from both custom and MTEB built-in tasks.
 
     Our custom tasks (synthetic_test, mfollowir) set task.corpus/queries/relevant_docs
-    as plain Python dicts.
-    MTEB 2.10+ built-in tasks set task.corpus/queries/relevant_docs as HuggingFace
-    Dataset objects — which must be iterated row-by-row.
+    as plain Python dicts keyed by split (e.g. task.corpus["test"]).
+    MTEB 2.10+ built-in tasks either set them as HuggingFace Dataset objects
+    keyed by subset then split (e.g. task.corpus["default"]["test"]), or store
+    everything in task.dataset (DatasetDict).
     """
-    if hasattr(task, "corpus") and task.corpus is not None:
-        corpus = _hf_dataset_to_corpus(task.corpus[split])
-        queries = _hf_dataset_to_queries(task.queries[split])
-        qrels_raw = task.relevant_docs[split]
-        # relevant_docs can be a plain dict already (both old and new MTEB)
-        relevant_docs = _hf_dataset_to_qrels(qrels_raw)
-        return corpus, queries, relevant_docs
+    if hasattr(task, "corpus") and task.corpus:
+        # Check if keyed by split directly (our custom tasks)
+        if split in task.corpus and getattr(task.corpus, "get", lambda x: None)(split):
+            corpus_raw = task.corpus[split]
+            queries_raw = (
+                task.queries.get(split, {}) if hasattr(task, "queries") else {}
+            )
+            qrels_raw = (
+                task.relevant_docs.get(split, {})
+                if hasattr(task, "relevant_docs")
+                else {}
+            )
+        else:
+            # MTEB built-in tasks usually key by subset (e.g. 'default', 'ru', etc.)
+            subset = (
+                list(task.corpus.keys())[0] if isinstance(task.corpus, dict) else None
+            )
+            if subset and split in task.corpus[subset]:
+                corpus_raw = task.corpus[subset][split]
+                queries_raw = (
+                    task.queries[subset].get(split, {})
+                    if hasattr(task, "queries")
+                    else {}
+                )
+                qrels_raw = (
+                    task.relevant_docs[subset].get(split, {})
+                    if hasattr(task, "relevant_docs")
+                    else {}
+                )
+            else:
+                corpus_raw = None
+
+        if corpus_raw:
+            corpus = _hf_dataset_to_corpus(corpus_raw)
+            queries = _hf_dataset_to_queries(queries_raw)
+            relevant_docs = _hf_dataset_to_qrels(qrels_raw)
+            return corpus, queries, relevant_docs
 
     # MTEB 2.10+ fallback: data stored in task.dataset (DatasetDict)
     if hasattr(task, "dataset") and task.dataset is not None:
