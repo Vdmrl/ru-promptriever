@@ -58,69 +58,58 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
     )
 
     def load_data(self, **kwargs):
-        """Load test.parquet and build corpus/queries/relevant_docs."""
+        """Load corpus from test_corpus.parquet and queries/relevance from test.parquet."""
         if self.data_loaded:
             return
 
-        logger.info("Loading ru-promptriever test split...")
-        ds = hf_datasets.load_dataset(
-            "Vladimirlv/ru-promptriever-dataset-v0.1",
+        dataset_path = self.metadata.dataset["path"]
+
+        # --- Load full retrieval corpus from test_corpus.parquet ---
+        logger.info("Loading ru-promptriever corpus (test_corpus.parquet)...")
+        corpus_ds = hf_datasets.load_dataset(
+            dataset_path,
             split="test",
+            data_files={"test": "test_corpus.parquet"},
         )
+        corpus = {}
+        for row in corpus_ds:
+            doc_id = str(row["docid"])
+            corpus[doc_id] = {
+                "text": row.get("text", ""),
+                "title": row.get("title", ""),
+            }
+        logger.info(f"Corpus loaded: {len(corpus)} documents")
 
-        corpus = {}  # {doc_id: {"text": ..., "title": ...}}
-        queries = {}  # {query_id: query_text}
-        relevant_docs = defaultdict(dict)  # {query_id: {doc_id: score}}
+        # --- Load queries and relevance judgments from test.parquet ---
+        logger.info("Loading ru-promptriever test queries (test.parquet)...")
+        query_ds = hf_datasets.load_dataset(
+            dataset_path,
+            split="test",
+            data_files={"test": "test.parquet"},
+        )
+        queries = {}
+        relevant_docs = defaultdict(dict)
 
-        for row in ds:
+        for row in query_ds:
             q_id = str(row["query_id"])
             only_query = row["only_query"]
             only_instruction = row.get("only_instruction", "")
             has_instruction = row.get("has_instruction", False)
 
-            # --- Build corpus from ALL passages ---
-            for passage in row.get("positive_passages", []) or []:
-                doc_id = str(passage["docid"])
-                if doc_id not in corpus:
-                    title = passage.get("title", "")
-                    text = passage.get("text", "")
-                    corpus[doc_id] = {"text": text, "title": title}
-
-            for passage in row.get("negative_passages", []) or []:
-                doc_id = str(passage["docid"])
-                if doc_id not in corpus:
-                    title = passage.get("title", "")
-                    text = passage.get("text", "")
-                    corpus[doc_id] = {"text": text, "title": title}
-
-            # Also check new_negatives if present
-            for passage in row.get("new_negatives", []) or []:
-                doc_id = str(passage["docid"])
-                if doc_id not in corpus:
-                    title = passage.get("title", "")
-                    text = passage.get("text", "")
-                    corpus[doc_id] = {"text": text, "title": title}
-
-            # --- Build queries ---
             if has_instruction and only_instruction:
                 # Instructed query: "{query} {instruction}"
                 inst_q_id = f"{q_id}-instruct"
                 queries[inst_q_id] = f"{only_query} {only_instruction}"
-
-                # Relevant docs for instructed query
                 for passage in row.get("positive_passages", []) or []:
                     relevant_docs[inst_q_id][str(passage["docid"])] = 1
             else:
                 # Standard query (no instruction)
                 queries[q_id] = only_query
-
-                # Relevant docs for standard query
                 for passage in row.get("positive_passages", []) or []:
                     relevant_docs[q_id][str(passage["docid"])] = 1
 
         logger.info(
-            f"Loaded test split: {len(corpus)} docs, "
-            f"{len(queries)} queries, "
+            f"Loaded test queries: {len(queries)} queries, "
             f"{sum(len(v) for v in relevant_docs.values())} relevance judgments"
         )
 
