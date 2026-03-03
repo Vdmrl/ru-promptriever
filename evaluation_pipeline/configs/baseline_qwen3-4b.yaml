@@ -86,6 +86,6 @@ datasets:
     task_names:
       # - "RiaNewsRetrieval"           # DISABLED: 704k docs, niche news domain
       - "RuBQRetrieval"
-      - "MIRACLRetrieval"
+      # - "MIRACLRetrieval"            # DISABLED: 9.5M docs, ~50 hours per LLM inference
     metrics:
       - "ndcg_at_10"
