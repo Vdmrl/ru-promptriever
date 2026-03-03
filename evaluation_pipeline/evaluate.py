@@ -616,12 +616,10 @@ def main():
                             )
                             all_metrics["retrieval"] = bm25_metrics
 
-                            # p-MRR for BM25
+                            # p-MRR for BM25: retrieve all queries using already-indexed corpus
                             if isinstance(task, RuPrompTrieverTestRetrieval):
                                 task.load_data()
                                 queries = task.queries["test"]
-                                corpus = task.corpus["test"]
-                                model.index_corpus(corpus)
                                 bm25_results = model.retrieve(queries, top_k=100)
                                 pmrr = evaluate_pmrr_synthetic(task, bm25_results)
                                 all_metrics["p_mrr"] = pmrr

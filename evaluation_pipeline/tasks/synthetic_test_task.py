@@ -115,15 +115,17 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
             only_instruction = row.get("only_instruction", "")
             has_instruction = row.get("has_instruction", False)
 
+            # Always create the standard (non-instructed) query
+            queries[q_id] = only_query
+            for passage in row.get("positive_passages", []) or []:
+                relevant_docs[q_id][str(passage["docid"])] = 1
+
+            # Additionally create the instructed version if available (enables p-MRR pairs)
             if has_instruction and only_instruction:
                 inst_q_id = f"{q_id}-instruct"
                 queries[inst_q_id] = f"{only_query} {only_instruction}"
                 for passage in row.get("positive_passages", []) or []:
                     relevant_docs[inst_q_id][str(passage["docid"])] = 1
-            else:
-                queries[q_id] = only_query
-                for passage in row.get("positive_passages", []) or []:
-                    relevant_docs[q_id][str(passage["docid"])] = 1
 
         logger.info(
             f"Loaded test queries: {len(queries)} queries, "
