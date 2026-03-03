@@ -44,7 +44,7 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
             "revision": "main",
         },
         type="Retrieval",
-        category="p2p",
+        category="t2t",
         modalities=["text"],
         eval_splits=["test"],
         eval_langs=["rus-Cyrl"],
