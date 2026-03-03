@@ -20,7 +20,7 @@ from collections import defaultdict
 from typing import Dict
 
 import datasets as hf_datasets
-from mteb import AbsTaskRetrieval
+from mteb.abstasks.retrieval import AbsTaskRetrieval
 
 logger = logging.getLogger(__name__)
 
