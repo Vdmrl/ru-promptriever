@@ -322,6 +322,30 @@ def _extract_task_data(task, split="test"):
     )
 
 
+def _trim_corpus_for_smoke_test(corpus, relevant_docs, max_noise=500):
+    """Keep only relevant docs + a small random sample for smoke testing."""
+    import random
+
+    relevant_doc_ids = set()
+    for qid, docs in relevant_docs.items():
+        relevant_doc_ids.update(docs.keys())
+
+    # Keep all relevant docs
+    trimmed = {did: corpus[did] for did in relevant_doc_ids if did in corpus}
+
+    # Add some random noise docs so retrieval isn't trivial
+    remaining = [did for did in corpus if did not in relevant_doc_ids]
+    noise_ids = random.sample(remaining, min(max_noise, len(remaining)))
+    for did in noise_ids:
+        trimmed[did] = corpus[did]
+
+    logger.info(
+        f"Smoke test: trimmed corpus from {len(corpus)} to {len(trimmed)} docs "
+        f"({len(relevant_doc_ids)} relevant + {len(noise_ids)} noise)"
+    )
+    return trimmed
+
+
 def evaluate_bm25(
     model: BM25Retriever,
     task,
@@ -340,6 +364,7 @@ def evaluate_bm25(
         relevant_docs = {
             qid: relevant_docs[qid] for qid in query_ids if qid in relevant_docs
         }
+        corpus = _trim_corpus_for_smoke_test(corpus, relevant_docs)
 
     model.index_corpus(corpus)
     results = model.retrieve(queries, top_k=top_k)
@@ -382,6 +407,7 @@ def evaluate_dense_custom(
         relevant_docs = {
             qid: relevant_docs[qid] for qid in query_ids if qid in relevant_docs
         }
+        corpus = _trim_corpus_for_smoke_test(corpus, relevant_docs)
 
     results = _dense_retrieve(model, queries, corpus, batch_size, top_k)
     metrics = compute_retrieval_metrics(relevant_docs, results)
