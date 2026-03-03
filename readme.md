@@ -47,6 +47,22 @@ huggingface-cli login
 # 5. Export WandB API key (from https://wandb.ai/authorize)
 export WANDB_API_KEY="your_api_key_here"
 
+```bash
 # 6. Run training script
 torchrun --nproc_per_node=2 train.py --config configs/v0.2_optimized4b_2_5090.yaml
 ```
+
+## Post-Training
+
+After the training finishes, only the lightweight LoRA adapter weights are saved. To merge these weights with the base model and push the final, standalone model to Hugging Face, run the `merge_lora.py` script:
+
+```bash
+python merge_lora.py \
+    --base_model_name_or_path "Qwen/Qwen3-4B" \
+    --lora_model_path "./output_v0.2_optimized4b" \
+    --output_dir "./merged_ru_promptriever" \
+    --push_to_hub "Vladimirlv/ru-promptriever-qwen3-4b"
+```
+
+*   `--lora_model_path`: Can be a local path or a Hugging Face repo ID.
+*   `--push_to_hub`: (Optional) Automatically pushes the final merged model and its tokenizer to your Hugging Face account.
