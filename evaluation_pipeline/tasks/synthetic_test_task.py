@@ -20,6 +20,7 @@ from collections import defaultdict
 from typing import Dict
 
 import datasets as hf_datasets
+from mteb import TaskMetadata
 from mteb.abstasks.retrieval import AbsTaskRetrieval
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
     """Custom MTEB task for the ru-promptriever synthetic test set."""
 
-    metadata = AbsTaskRetrieval.metadata_cls(
+    metadata = TaskMetadata(
         name="RuPrompTrieverTestRetrieval",
         description=(
             "Retrieval evaluation on the test split of the Russian "

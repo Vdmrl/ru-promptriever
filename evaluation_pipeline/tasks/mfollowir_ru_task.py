@@ -18,6 +18,7 @@ import os
 from collections import defaultdict
 from typing import Dict
 
+from mteb import TaskMetadata
 from mteb.abstasks.retrieval import AbsTaskRetrieval
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ _DEFAULT_DATA_DIR = os.path.join(
 class MFollowIRRuRetrieval(AbsTaskRetrieval):
     """Custom MTEB task for mFollowIR Russian retrieval."""
 
-    metadata = AbsTaskRetrieval.metadata_cls(
+    metadata = TaskMetadata(
         name="MFollowIRRuRetrieval",
         description=(
             "Russian split of mFollowIR — multilingual benchmark for "
