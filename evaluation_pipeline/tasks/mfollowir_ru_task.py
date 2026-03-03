@@ -143,12 +143,12 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
             logger.info(
                 "Loading NeuCLIR-2022 Russian corpus via HuggingFace datasets..."
             )
-            # neuclir/neuclir1 has a 'rus' config with 'docs' split
+            # neuclir/neuclir1 has a 'default' config, and 'rus' is likely a split
+            # Let's use the explicit data files if the builder config is weird.
             corpus_ds = hf_datasets.load_dataset(
                 "neuclir/neuclir1",
-                "rus",
-                split="docs",
-                trust_remote_code=True,
+                data_files={"rus": "data/rus-*.jsonl.gz"},
+                split="rus",
             )
 
             corpus = {}
