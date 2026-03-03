@@ -66,3 +66,64 @@ python merge_lora.py \
 
 *   `--lora_model_path`: Can be a local path or a Hugging Face repo ID.
 *   `--push_to_hub`: (Optional) Automatically pushes the final merged model and its tokenizer to your Hugging Face account.
+
+## Evaluation Pipeline
+
+The `evaluation_pipeline/` directory contains a full benchmarking suite to compare Russian retrieval models on **Synthetic Test (ru-promptriever)**, **mFollowIR-RU**, and **ruMTEB** datasets. It supports `bm25s`, `sentence-transformers`, causal LLMs (last-token pooling), and the custom instruction-following models.
+
+### Quick Start (Deployment on Cloud GPUs like Vast.ai)
+
+1. **Clone and setup base environment**:
+   ```bash
+   git clone https://github.com/Vdmrl/ru-promptriever.git
+   cd ru-promptriever/pythonProject
+   pip install --upgrade pip wheel packaging ninja psutil
+   ```
+
+2. **Install Flash Attention safely** (requires `ninja` and limits workers to prevent Out-Of-Memory during compilation):
+   ```bash
+   MAX_JOBS=4 pip install flash-attn --no-build-isolation
+   ```
+
+3. **Install evaluation requirements**:
+   ```bash
+   cd evaluation_pipeline
+   pip install -r requirements.txt
+   ```
+
+4. **Login to Hugging Face** (required to pull private models/datasets and upload results):
+   ```bash
+   huggingface-cli login
+   ```
+
+### Running the Evaluation
+
+All settings (models, datasets, batch sizes) are configured in `configs/eval_config.yaml`.
+
+```bash
+# 1. Smoke test (5 queries per model) to ensure no memory errors:
+python evaluate.py --config configs/eval_config.yaml --max-queries 5
+
+# 2. Full evaluation (all models × all datasets):
+python evaluate.py --config configs/eval_config.yaml
+
+# 3. Skip existing results if resuming an interrupted run:
+python evaluate.py --config configs/eval_config.yaml --skip-existing
+```
+
+### Uploading Results to Hugging Face
+
+Results are saved as JSON files in `evaluation_pipeline/results/`. To preserve them, upload the entire folder as a HF Dataset:
+
+```python
+from huggingface_hub import HfApi
+
+repo_id = "Vladimirlv/ru-promptriever-benchmark-results"
+HfApi().create_repo(repo_id=repo_id, repo_type="dataset", exist_ok=True)
+HfApi().upload_folder(
+    folder_path="./results",
+    repo_id=repo_id,
+    repo_type="dataset",
+    path_in_repo="run_1" 
+)
+```
