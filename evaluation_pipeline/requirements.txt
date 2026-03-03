@@ -1,0 +1,16 @@
+# Evaluation pipeline dependencies
+mteb>=1.14.0
+sentence-transformers>=2.7.0
+transformers>=4.51.0
+torch>=2.1.0
+bm25s[full]>=0.2.0
+datasets>=2.14.0
+huggingface-hub>=0.20.0
+ir-datasets>=0.5.6
+tabulate>=0.9.0
+pyyaml>=6.0
+numpy>=1.24.0
+tqdm>=4.65.0
+accelerate>=0.25.0
+pytrec_eval>=0.5
+flash-attn>=2.0.0

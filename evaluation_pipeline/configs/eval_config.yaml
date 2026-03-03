@@ -1,0 +1,88 @@
+# =============================================================================
+# Evaluation Pipeline Configuration
+# =============================================================================
+
+# --- General ---
+device: "cuda:0"
+dtype: "bfloat16"
+output_dir: "./results"
+
+# Generic instruction for OOD benchmarks (ruMTEB) where no instructions exist.
+# Appended to query for Promptriever-type models to avoid out-of-distribution.
+generic_instruction: "Найди релевантный документ."
+
+# --- Models ---
+models:
+  - name: "bm25"
+    type: "bm25"
+    # No model_name_or_path needed
+    batch_size: 512
+
+  - name: "multilingual-e5-large"
+    type: "encoder"
+    model_name_or_path: "intfloat/multilingual-e5-large"
+    batch_size: 64
+    max_length: 512
+    # E5 requires "query: " / "passage: " prefixes
+    query_prefix: "query: "
+    passage_prefix: "passage: "
+
+  - name: "bge-m3"
+    type: "encoder"
+    model_name_or_path: "BAAI/bge-m3"
+    batch_size: 64
+    max_length: 8192
+    query_prefix: ""
+    passage_prefix: ""
+
+  - name: "promptriever-llama3.1-8b"
+    type: "causal_lm"
+    model_name_or_path: "samaya-ai/promptriever-llama3.1-8b-v1"
+    batch_size: 4
+    max_length: 512
+
+  - name: "qwen3-embedding-4b"
+    type: "qwen3_embedding"
+    model_name_or_path: "Qwen/Qwen3-Embedding-4B"
+    batch_size: 16
+    max_length: 8192
+
+  - name: "ru-promptriever-qwen3-4b"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b"
+    batch_size: 16
+    max_length: 512
+
+  - name: "giga-embeddings-instruct"
+    type: "giga_embedding"
+    model_name_or_path: "ai-sage/Giga-Embeddings-instruct"
+    batch_size: 16
+    max_length: 4096
+    query_prompt: "Instruct: Дан вопрос, необходимо найти абзац текста с ответом\nQuery: "
+
+# --- Datasets ---
+datasets:
+  - name: "synthetic_test"
+    type: "synthetic_test"
+    data_path: "Vladimirlv/ru-promptriever-dataset-v0.1"
+    split: "test"
+    metrics:
+      - "ndcg_at_20"
+      - "p_mrr"
+
+  - name: "mfollowir_ru"
+    type: "mfollowir"
+    data_path: "jhu-clsp/mFollowIR"
+    metrics:
+      - "ndcg_at_20"
+      - "p_mrr"
+
+  - name: "rumteb_retrieval"
+    type: "rumteb"
+    # Built-in MTEB task names for Russian retrieval
+    task_names:
+      - "RiaNewsRetrieval"
+      - "RuBQRetrieval"
+      - "MIRACLRetrieval"
+    metrics:
+      - "ndcg_at_10"
