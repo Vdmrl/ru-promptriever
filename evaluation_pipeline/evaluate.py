@@ -140,7 +140,9 @@ def load_tasks(dataset_cfg: dict) -> List:
 
     elif ds_type == "rumteb":
         task_names = dataset_cfg.get("task_names", [])
-        tasks = mteb.get_tasks(tasks=task_names)
+        # Limit to Russian only — without this, multilingual tasks like
+        # MIRACLRetrieval download ALL 18 language subsets (many GB of data).
+        tasks = mteb.get_tasks(tasks=task_names, languages=["rus"])
         return list(tasks)
 
     else:
