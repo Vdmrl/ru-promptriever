@@ -24,6 +24,7 @@ import logging
 import os
 from typing import Dict, List
 
+from huggingface_hub import HfApi
 import mteb
 import numpy as np
 
@@ -42,6 +43,27 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Hugging Face integration
+# ---------------------------------------------------------------------------
+
+
+def upload_to_huggingface(output_dir: str, repo_id: str):
+    """Upload the results directory to a Hugging Face Dataset repository."""
+    try:
+        api = HfApi()
+        api.create_repo(repo_id=repo_id, repo_type="dataset", exist_ok=True)
+        api.upload_folder(
+            folder_path=output_dir,
+            repo_id=repo_id,
+            repo_type="dataset",
+            path_in_repo=".",
+        )
+        logger.info(f"Successfully uploaded intermediate results to HF: {repo_id}")
+    except Exception as e:
+        logger.error(f"Failed to upload results to Hugging Face: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -453,6 +475,12 @@ def main():
         action="store_true",
         help="Skip model-dataset pairs that already have results.",
     )
+    parser.add_argument(
+        "--hf-repo",
+        type=str,
+        default=None,
+        help="Hugging Face Dataset repo ID for automatic intermediate uploads (e.g. 'Vladimirlv/my-results').",
+    )
 
     args = parser.parse_args()
 
@@ -582,6 +610,10 @@ def main():
 
                 save_results(all_metrics, model_name, dataset_name, output_dir)
                 logger.info(f"✓ {model_name} on {dataset_name} completed.")
+
+                # Upload intermediate results
+                if args.hf_repo:
+                    upload_to_huggingface(output_dir, args.hf_repo)
 
             except Exception as e:
                 logger.error(

@@ -104,8 +104,8 @@ All settings (models, datasets, batch sizes) are configured in `configs/baseline
 # 1. Smoke test (5 queries per model) to ensure no memory errors:
 python evaluate.py --config configs/baseline_qwen3-4b.yaml --max-queries 5
 
-# 2. Full evaluation (all models × all datasets):
-python evaluate.py --config configs/baseline_qwen3-4b.yaml
+# 2. Full evaluation with automatic intermediate uploads to Hugging Face:
+python evaluate.py --config configs/baseline_qwen3-4b.yaml --hf-repo "Vladimirlv/ru-promptriever-benchmark-results"
 
 # 3. Skip existing results if resuming an interrupted run:
 python evaluate.py --config configs/baseline_qwen3-4b.yaml --skip-existing
@@ -113,7 +113,11 @@ python evaluate.py --config configs/baseline_qwen3-4b.yaml --skip-existing
 
 ### Uploading Results to Hugging Face
 
-Results are saved as JSON files in `evaluation_pipeline/results/`. To preserve them, upload the entire folder as a HF Dataset:
+Results are automatically saved as JSON files in `evaluation_pipeline/results/`. 
+
+If you pass the `--hf-repo "YourName/repo-name"` argument, the script will **automatically upload** the `results/` folder to your Hugging Face Dataset after every successful evaluation step. This prevents data loss if a cloud instance is interrupted.
+
+If you didn't use the flag and want to upload them manually later, you can use:
 
 ```python
 from huggingface_hub import HfApi
