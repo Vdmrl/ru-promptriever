@@ -54,7 +54,7 @@ torchrun --nproc_per_node=2 train.py --config configs/v0.2_optimized4b_2_5090.ya
 After the training finishes, only the lightweight LoRA adapter weights are saved. To merge these weights with the base model and push the final, standalone model to Hugging Face, run the `merge_lora.py` script:
 
 ```bash
-python merge_lora.py \
+python3 merge_lora.py \
     --base_model_name_or_path "Qwen/Qwen3-4B" \
     --lora_model_path "./output_v0.2_optimized4b" \
     --output_dir "./merged_ru_promptriever" \
@@ -81,10 +81,14 @@ The `evaluation_pipeline/` directory contains a full benchmarking suite to compa
    ```bash
    pip install -r requirements.txt
    ```
-4. **Login to Hugging Face** (required to pull private models/datasets and upload results):
+3. **Login to Hugging Face** (required to pull private models/datasets and upload results):
 
    ```bash
    huggingface-cli login
+   ```
+   *Alternative: If `huggingface-cli` is not found, you can login via Python:*
+   ```bash
+   python3 -c "from huggingface_hub import login; login('ВАШ_ТОКЕН_ЗДЕСЬ')"
    ```
 
 ### Running the Evaluation
@@ -93,13 +97,13 @@ All settings (models, datasets, batch sizes) are configured in `configs/baseline
 
 ```bash
 # 1. Smoke test (5 queries per model) to ensure no memory errors:
-python evaluate.py --config configs/baseline_qwen3-4b.yaml --max-queries 5
+python3 evaluate.py --config configs/baseline_qwen3-4b.yaml --max-queries 5
 
 # 2. Full evaluation with automatic intermediate uploads to Hugging Face:
-python evaluate.py --config configs/baseline_qwen3-4b.yaml --hf-repo "Vladimirlv/ru-promptriever-benchmark-results"
+python3 evaluate.py --config configs/baseline_qwen3-4b.yaml --hf-repo "Vladimirlv/ru-promptriever-benchmark-results"
 
 # 3. Skip existing results if resuming an interrupted run:
-python evaluate.py --config configs/baseline_qwen3-4b.yaml --skip-existing
+python3 evaluate.py --config configs/baseline_qwen3-4b.yaml --skip-existing
 ```
 
 ### Uploading Results to Hugging Face
