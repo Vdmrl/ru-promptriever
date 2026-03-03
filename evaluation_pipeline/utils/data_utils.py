@@ -26,6 +26,17 @@ def load_config(config_path: str) -> dict:
     return cfg
 
 
+def _custom_json_default(obj):
+    """Custom JSON serializer for objects not serializable by default json dump."""
+    if hasattr(obj, "to_dict"):
+        return obj.to_dict()
+    elif hasattr(obj, "model_dump"):  # Pydantic v2
+        return obj.model_dump()
+    elif hasattr(obj, "dict"):  # Pydantic v1
+        return obj.dict()
+    raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+
+
 def save_results(
     results: Dict[str, Any],
     model_name: str,
@@ -60,6 +71,7 @@ def save_results(
             f,
             indent=2,
             ensure_ascii=False,
+            default=_custom_json_default,
         )
 
     logger.info(f"Results saved to {filepath}")
