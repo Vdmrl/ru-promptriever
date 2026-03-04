@@ -70,6 +70,7 @@ class GigaEmbeddingRetriever(BaseRetriever):
             },
             config_kwargs={
                 "trust_remote_code": True,
+                "rope_scaling": {"type": "linear", "factor": 1.0},
             },
         )
         self.model.max_seq_length = max_length
