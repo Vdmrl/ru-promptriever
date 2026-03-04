@@ -47,8 +47,12 @@ def compute_pmrr(
         std_results = results_standard.get(std_qid, {})
         inst_results = results_instructed.get(inst_qid, {})
 
-        std_relevant = set(relevant_docs_standard.get(std_qid, {}).keys())
-        inst_relevant = set(relevant_docs_instructed.get(inst_qid, {}).keys())
+        std_relevant = {
+            k for k, v in relevant_docs_standard.get(std_qid, {}).items() if v > 0
+        }
+        inst_relevant = {
+            k for k, v in relevant_docs_instructed.get(inst_qid, {}).items() if v > 0
+        }
 
         # Documents that should decrease in rank after adding instruction:
         # relevant to standard query, but NOT relevant to instructed query

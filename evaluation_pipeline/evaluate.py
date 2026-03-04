@@ -99,6 +99,8 @@ def load_model(model_cfg: dict, global_cfg: dict):
             dtype=dtype,
             max_length=model_cfg.get("max_length", 512),
             generic_instruction=generic_instruction,
+            query_prefix=model_cfg.get("query_prefix", ""),
+            passage_prefix=model_cfg.get("passage_prefix", ""),
         )
 
     elif model_type == "qwen3_embedding":

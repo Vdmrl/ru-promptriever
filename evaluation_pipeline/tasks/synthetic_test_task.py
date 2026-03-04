@@ -62,6 +62,15 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
 
         Uses hf_hub_download to fetch only the specific files needed,
         avoiding downloading the entire 11GB+ train split.
+
+        Data structure from build_dataset.py:
+          - Standard rows: query_id="12345", has_instruction=False,
+            positive_passages=[rewritten_original_positive]
+          - Instructed rows: query_id="12345-instruct", has_instruction=True,
+            positive_passages=[final_positive],
+            negative_passages=[instruction_negatives with explanation="instruction_negative"]
+
+        We load them as-is (no extra suffix manipulation).
         """
         if self.data_loaded:
             return
@@ -109,27 +118,58 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
         queries = {}
         relevant_docs = defaultdict(dict)
 
+        # Track instruction negatives per pair for p-MRR:
+        # instruction_negatives[base_qid] = set of doc_ids that are relevant
+        # to the standard query but NOT to the instructed query
+        instruction_negatives_by_pair = defaultdict(set)
+
         for row in query_ds:
             q_id = str(row["query_id"])
             only_query = row["only_query"]
             only_instruction = row.get("only_instruction", "")
             has_instruction = row.get("has_instruction", False)
 
-            # Always create the standard (non-instructed) query
-            queries[q_id] = only_query
-            for passage in row.get("positive_passages", []) or []:
-                relevant_docs[q_id][str(passage["docid"])] = 1
-
-            # Additionally create the instructed version if available (enables p-MRR pairs)
             if has_instruction and only_instruction:
-                inst_q_id = f"{q_id}-instruct"
-                queries[inst_q_id] = f"{only_query} {only_instruction}"
+                # Instructed row: query_id already ends with "-instruct"
+                # Query text = "{query} {instruction}" (same as training format)
+                queries[q_id] = f"{only_query} {only_instruction}"
+
+                # Positive passages → relevance 1
                 for passage in row.get("positive_passages", []) or []:
-                    relevant_docs[inst_q_id][str(passage["docid"])] = 1
+                    relevant_docs[q_id][str(passage["docid"])] = 1
+
+                # Instruction negatives → relevance 0 for instructed query
+                # These are docs relevant to the standard query but NOT to
+                # the instructed query — they should decrease in rank.
+                base_qid = q_id[: -len("-instruct")]
+                for passage in row.get("negative_passages", []) or []:
+                    doc_id = str(passage["docid"])
+                    if doc_id not in relevant_docs[q_id]:
+                        relevant_docs[q_id][doc_id] = 0
+                    # Remember these for adding to standard query qrels
+                    instruction_negatives_by_pair[base_qid].add(doc_id)
+            else:
+                # Standard row: plain query without instruction
+                queries[q_id] = only_query
+                for passage in row.get("positive_passages", []) or []:
+                    relevant_docs[q_id][str(passage["docid"])] = 1
+
+        # Second pass: add instruction negatives as RELEVANT (=1) for standard
+        # queries. These docs ARE relevant to the standard query (they matched
+        # the original topic) but are NOT relevant to the instructed query.
+        # p-MRR needs: should_decrease = std_relevant - inst_relevant
+        for base_qid, neg_doc_ids in instruction_negatives_by_pair.items():
+            if base_qid in relevant_docs:
+                for doc_id in neg_doc_ids:
+                    if doc_id not in relevant_docs[base_qid]:
+                        relevant_docs[base_qid][doc_id] = 1
 
         logger.info(
             f"Loaded test queries: {len(queries)} queries, "
-            f"{sum(len(v) for v in relevant_docs.values())} relevance judgments"
+            f"{sum(1 for v in relevant_docs.values() for s in v.values() if s > 0)} "
+            f"positive judgments, "
+            f"{sum(1 for v in relevant_docs.values() for s in v.values() if s == 0)} "
+            f"instruction-negative judgments"
         )
 
         self.corpus = {"test": corpus}
@@ -141,24 +181,16 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
         """Return (standard_query_id, instructed_query_id) pairs for p-MRR.
 
         In the test split, pairs are linked by the base query_id:
-        - Standard: query_id (without "-instruct" suffix, has_instruction=False)
-        - Instructed: query_id (with has_instruction=True)
+        - Standard: "12345" (has_instruction=False)
+        - Instructed: "12345-instruct" (has_instruction=True, already in data)
         """
         queries = self.queries.get("test", {})
-        standard = set()
-        instructed = set()
+        pairs = []
 
         for qid in queries:
             if qid.endswith("-instruct"):
-                instructed.add(qid)
-                standard.add(qid.replace("-instruct", ""))
-            else:
-                standard.add(qid)
-
-        pairs = []
-        for std_qid in standard:
-            inst_qid = f"{std_qid}-instruct"
-            if inst_qid in instructed:
-                pairs.append((std_qid, inst_qid))
+                std_qid = qid[: -len("-instruct")]
+                if std_qid in queries:
+                    pairs.append((std_qid, qid))
 
         return pairs

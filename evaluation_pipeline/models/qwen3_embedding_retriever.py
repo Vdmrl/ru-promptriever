@@ -10,6 +10,8 @@ import logging
 from typing import List, Optional
 
 import numpy as np
+import torch
+from mteb import EncoderProtocol
 from sentence_transformers import SentenceTransformer
 
 from .base import BaseRetriever
@@ -17,7 +19,7 @@ from .base import BaseRetriever
 logger = logging.getLogger(__name__)
 
 
-class Qwen3EmbeddingRetriever(BaseRetriever):
+class Qwen3EmbeddingRetriever(EncoderProtocol, BaseRetriever):
     """Wrapper for Qwen3-Embedding using sentence-transformers.
 
     Qwen3-Embedding natively handles instruction prompts through the
@@ -82,3 +84,18 @@ class Qwen3EmbeddingRetriever(BaseRetriever):
             prompt_name=prompt_name,
         )
         return embeddings
+
+    def similarity(self, e1, e2):
+        """Cosine similarity via dot product (embeddings are L2-normalized)."""
+        if not isinstance(e1, torch.Tensor):
+            e1 = torch.as_tensor(e1)
+        if not isinstance(e2, torch.Tensor):
+            e2 = torch.as_tensor(e2)
+        return e1 @ e2.T
+
+    def similarity_pairwise(self, e1, e2):
+        if not isinstance(e1, torch.Tensor):
+            e1 = torch.as_tensor(e1)
+        if not isinstance(e2, torch.Tensor):
+            e2 = torch.as_tensor(e2)
+        return (e1 * e2).sum(dim=1)

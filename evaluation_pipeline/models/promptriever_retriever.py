@@ -165,14 +165,32 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
                 return_tensors="pt",
             ).to(self.model.device)
 
-            outputs = self.model(
-                **inputs,
-                output_hidden_states=True,
-                use_cache=False,
-                return_dict=True,
-            )
+            if hasattr(self.model, "lm_head"):
+                # AutoModelForCausalLM path: bypass lm_head with Identity
+                # to get post-norm hidden states (matching training).
+                original_lm_head = self.model.lm_head
+                self.model.lm_head = torch.nn.Identity()
+                try:
+                    outputs = self.model(
+                        **inputs,
+                        output_hidden_states=False,
+                        use_cache=False,
+                        return_dict=True,
+                    )
+                    last_hidden = outputs.logits
+                finally:
+                    self.model.lm_head = original_lm_head
+            else:
+                # AutoModel (PEFT) path: model already returns post-norm
+                # hidden states as last_hidden_state.
+                outputs = self.model(
+                    **inputs,
+                    output_hidden_states=False,
+                    use_cache=False,
+                    return_dict=True,
+                )
+                last_hidden = outputs.last_hidden_state
 
-            last_hidden = outputs.hidden_states[-1]
             embeddings = _last_token_pool(last_hidden, inputs["attention_mask"])
             embeddings = F.normalize(embeddings, p=2, dim=1)
 
