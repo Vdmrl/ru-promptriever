@@ -76,6 +76,23 @@ class GigaEmbeddingRetriever(BaseRetriever):
         except Exception as e:
             logger.warning(f"Failed to monkeypatch ROPE_INIT_FUNCTIONS: {e}")
 
+        # Monkeypatch for transformers >= 4.51.0 where `all_tied_weights_keys` is expected on the model object
+        # but custom remote models (like GigarEmbedModel) might not define it
+        try:
+            import transformers.modeling_utils as modeling_utils
+
+            if not hasattr(modeling_utils.PreTrainedModel, "all_tied_weights_keys"):
+                # Add a property that returns an empty tuple if not otherwise defined
+                setattr(
+                    modeling_utils.PreTrainedModel,
+                    "all_tied_weights_keys",
+                    property(lambda self: getattr(self, "_tied_weights_keys", [])),
+                )
+        except Exception as e:
+            logger.warning(
+                f"Failed to monkeypatch PreTrainedModel.all_tied_weights_keys: {e}"
+            )
+
         """
         Args:
             model_name_or_path: HF model ID.
