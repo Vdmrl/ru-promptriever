@@ -41,7 +41,7 @@ def compute_pmrr(
     Returns:
         p-MRR score in [-100, +100].
     """
-    pairwise_scores = []
+    query_pmrr_scores = []
 
     for std_qid, inst_qid in query_pairs:
         std_results = results_standard.get(std_qid, {})
@@ -65,6 +65,8 @@ def compute_pmrr(
         std_ranking = _rank_documents(std_results)
         inst_ranking = _rank_documents(inst_results)
 
+        query_scores = []
+
         for doc_id in should_decrease:
             std_rank = std_ranking.get(doc_id)
             inst_rank = inst_ranking.get(doc_id)
@@ -77,16 +79,29 @@ def compute_pmrr(
             std_rank = std_rank if std_rank is not None else max_rank
             inst_rank = inst_rank if inst_rank is not None else max_rank
 
-            # Positive score if doc moved down (increased rank number)
             std_rr = 1.0 / std_rank
             inst_rr = 1.0 / inst_rank
-            pairwise_scores.append(std_rr - inst_rr)
 
-    if not pairwise_scores:
+            # FollowIR Paper Equation 1:
+            if std_rank > inst_rank:
+                # Rank worsened (moved up to top, e.g. 10 -> 1) -> Negative reward
+                # Ratio: (MRRog / MRRnew) - 1 => (std_rr / inst_rr) - 1.0
+                score = (std_rr / inst_rr) - 1.0
+            else:
+                # Rank improved (moved down, e.g. 1 -> 10) -> Positive reward
+                # Ratio: 1 - (MRRnew / MRRog) => 1.0 - (inst_rr / std_rr)
+                score = 1.0 - (inst_rr / std_rr)
+
+            query_scores.append(score)
+
+        if query_scores:
+            query_pmrr_scores.append(float(np.mean(query_scores)))
+
+    if not query_pmrr_scores:
         return 0.0
 
-    # Scale to [-100, +100]
-    return float(np.mean(pairwise_scores) * 100)
+    # Macro-average across all queries, scale to [-100, +100]
+    return float(np.mean(query_pmrr_scores) * 100)
 
 
 def _rank_documents(doc_scores: Dict[str, float]) -> Dict[str, int]:
