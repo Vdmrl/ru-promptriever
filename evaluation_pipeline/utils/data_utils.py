@@ -112,7 +112,21 @@ def format_results_table(results: List[Dict[str, Any]]) -> str:
             # MTEB returns nested dicts; extract main scores
             flat_metrics = _flatten_metrics(metrics)
             for metric_name, value in flat_metrics.items():
-                rows.append([model, dataset, metric_name, f"{value:.4f}"])
+                # Normalize MTEB names to match pytrec_eval (e.g. ndcg_at_10 -> ndcg_cut_10)
+                if "_at_" in metric_name and (
+                    "ndcg" in metric_name or "map" in metric_name
+                ):
+                    normalized_name = metric_name.replace("_at_", "_cut_")
+                elif (
+                    metric_name.startswith("nauc_")
+                    or "precision" in metric_name
+                    or "recall" in metric_name
+                ):
+                    continue  # Skip verbose MTEB metrics for clarity in table
+                else:
+                    normalized_name = metric_name
+
+                rows.append([model, dataset, normalized_name, f"{value:.4f}"])
         else:
             rows.append([model, dataset, "raw", str(metrics)])
 
