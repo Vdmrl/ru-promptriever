@@ -89,3 +89,15 @@ datasets:
       # - "MIRACLRetrieval"            # DISABLED: 9.5M docs, ~50 hours per LLM inference
     metrics:
       - "ndcg_at_10"
+
+  # --- English Sanity Check ---
+  # Small BEIR datasets to verify metrics match published Promptriever paper scores.
+  # SciFact: 5k docs, 300 queries. NFCorpus: 3.6k docs, 323 queries.
+  # Total runtime: ~5-10 min for all models.
+  - name: "en_mteb_retrieval"
+    type: "en_mteb"
+    task_names:
+      - "SciFact"
+      - "NFCorpus"
+    metrics:
+      - "ndcg_at_10"

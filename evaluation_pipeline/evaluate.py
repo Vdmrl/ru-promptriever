@@ -147,6 +147,11 @@ def load_tasks(dataset_cfg: dict) -> List:
         tasks = mteb.get_tasks(tasks=task_names, languages=["rus"])
         return list(tasks)
 
+    elif ds_type == "en_mteb":
+        task_names = dataset_cfg.get("task_names", [])
+        tasks = mteb.get_tasks(tasks=task_names, languages=["eng"])
+        return list(tasks)
+
     else:
         raise ValueError(f"Unknown dataset type: {ds_type}")
 
@@ -173,7 +178,7 @@ def prepare_queries_for_model(
         models, append the generic instruction to avoid OOD. For encoders
         and BM25, leave queries as-is.
     """
-    if dataset_type == "rumteb" and model_type == "causal_lm":
+    if dataset_type in ("rumteb", "en_mteb") and model_type == "causal_lm":
         return {qid: f"{text} {generic_instruction}" for qid, text in queries.items()}
 
     return queries
@@ -504,7 +509,7 @@ def evaluate_with_mteb(
     generic instruction into queries.
     """
     eval_model = model
-    if model_type == "causal_lm" and dataset_type == "rumteb":
+    if model_type == "causal_lm" and dataset_type in ("rumteb", "en_mteb"):
         logger.info(
             f'Wrapping CausalLM with generic instruction: "{generic_instruction}"'
         )
@@ -719,7 +724,7 @@ def main():
                 tasks = load_tasks(dataset_cfg)
                 all_metrics = {}
 
-                if dataset_type == "rumteb":
+                if dataset_type in ("rumteb", "en_mteb"):
                     # --- ruMTEB: use MTEB built-in evaluation ---
                     if model_type == "bm25":
                         for task in tasks:
