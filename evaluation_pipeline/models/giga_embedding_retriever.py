@@ -29,17 +29,17 @@ class GigaEmbeddingRetriever(BaseRetriever):
         max_length: int = 4096,
         **kwargs,
     ):
-        # Monkeypatch for transformers >= 4.45 where ROPE_INIT_FUNCTIONS["default"] was removed.
-        # Giga-Embeddings' custom modeling_gigarembed.py hardcodes this key and crashes without it.
+        # Monkeypatch for transformers >= 4.45 RoPE changes
+        # 1. ROPE_INIT_FUNCTIONS["default"] was removed.
+        # 2. They now strictly require a "factor" key in rope_parameters_dict
         try:
             import transformers.modeling_rope_utils as rope_utils
 
+            # Handle "default" key
             if (
                 hasattr(rope_utils, "ROPE_INIT_FUNCTIONS")
                 and "default" not in rope_utils.ROPE_INIT_FUNCTIONS
             ):
-                # "default" was the old name for the standard linear/default RoPE
-                # fallback to "linear" if it exists, else we just grab the first available function.
                 if "linear" in rope_utils.ROPE_INIT_FUNCTIONS:
                     rope_utils.ROPE_INIT_FUNCTIONS["default"] = (
                         rope_utils.ROPE_INIT_FUNCTIONS["linear"]
@@ -48,6 +48,31 @@ class GigaEmbeddingRetriever(BaseRetriever):
                     rope_utils.ROPE_INIT_FUNCTIONS["default"] = next(
                         iter(rope_utils.ROPE_INIT_FUNCTIONS.values())
                     )
+
+            # Handle "factor" key error by wrapping the initialization function
+            if hasattr(rope_utils, "_compute_linear_scaling_rope_parameters"):
+                original_init = rope_utils._compute_linear_scaling_rope_parameters
+
+                def patched_init(
+                    config, device=None, seq_len=None, layer_type=None, *args, **kwargs
+                ):
+                    # Ensure factor exists in config.rope_parameters before calling original
+                    if hasattr(config, "rope_parameters") and config.rope_parameters:
+                        rope_dict = (
+                            config.rope_parameters.get(layer_type)
+                            if layer_type
+                            else config.rope_parameters
+                        )
+                        if isinstance(rope_dict, dict) and "factor" not in rope_dict:
+                            rope_dict["factor"] = 1.0
+                    return original_init(
+                        config, device, seq_len, layer_type, *args, **kwargs
+                    )
+
+                rope_utils._compute_linear_scaling_rope_parameters = patched_init
+                rope_utils.ROPE_INIT_FUNCTIONS["linear"] = patched_init
+                rope_utils.ROPE_INIT_FUNCTIONS["default"] = patched_init
+
         except Exception as e:
             logger.warning(f"Failed to monkeypatch ROPE_INIT_FUNCTIONS: {e}")
 
