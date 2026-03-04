@@ -137,6 +137,21 @@ def format_results_table(results: List[Dict[str, Any]]) -> str:
 def _flatten_metrics(d: Any, prefix: str = "") -> Dict[str, float]:
     """Recursively flatten nested metric dicts, adapting for MTEB 2.10+ lists."""
     flat = {}
+
+    # Handle MTEB 2.10.5 task object structure: [{"task_name": "...", "scores": ...}]
+    if (
+        isinstance(d, list)
+        and len(d) > 0
+        and isinstance(d[0], dict)
+        and "task_name" in d[0]
+    ):
+        for task_output in d:
+            task_name = task_output.get("task_name", "mteb")
+            scores = task_output.get("scores", {})
+            # recurse with task_name as prefix
+            flat.update(_flatten_metrics(scores, task_name))
+        return flat
+
     if isinstance(d, dict):
         for key, value in d.items():
             # Skip non-metric metadata fields from MTEB 2.10+ outputs
@@ -149,7 +164,18 @@ def _flatten_metrics(d: Any, prefix: str = "") -> Dict[str, float]:
             ]:
                 continue
 
-            full_key = f"{prefix}.{key}" if prefix else str(key)
+            # Skip verbose structure keys
+            if str(key) in ["scores", "test", "default", "mteb"] and isinstance(
+                value, (dict, list)
+            ):
+                full_key = prefix
+            else:
+                full_key = f"{prefix}.{key}" if prefix else str(key)
+
+            # Strip leading dots if prefix was empty but key was skipped
+            if full_key.startswith("."):
+                full_key = full_key[1:]
+
             if isinstance(value, dict):
                 flat.update(_flatten_metrics(value, full_key))
             elif isinstance(value, list):
@@ -157,7 +183,7 @@ def _flatten_metrics(d: Any, prefix: str = "") -> Dict[str, float]:
                     flat.update(_flatten_metrics(item, full_key))
             elif isinstance(value, (int, float)):
                 # Keep the simplest name possible for the table (like ndcg_at_10)
-                flat[str(key)] = float(value)
+                flat[str(full_key)] = float(value)
     elif isinstance(d, list):
         for item in d:
             flat.update(_flatten_metrics(item, prefix))
