@@ -82,12 +82,19 @@ class GigaEmbeddingRetriever(BaseRetriever):
             import transformers.modeling_utils as modeling_utils
 
             if not hasattr(modeling_utils.PreTrainedModel, "all_tied_weights_keys"):
-                # Add a property that returns an empty dict if not otherwise defined
-                # (Transformers expects a dict to call .keys() and .values() on it)
+
+                def get_tied(self):
+                    if not hasattr(self, "_tied_weights_keys"):
+                        self._tied_weights_keys = {}
+                    return self._tied_weights_keys
+
+                def set_tied(self, value):
+                    self._tied_weights_keys = value
+
                 setattr(
                     modeling_utils.PreTrainedModel,
                     "all_tied_weights_keys",
-                    property(lambda self: getattr(self, "_tied_weights_keys", {})),
+                    property(get_tied, set_tied),
                 )
         except Exception as e:
             logger.warning(
