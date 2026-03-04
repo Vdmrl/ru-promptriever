@@ -84,12 +84,13 @@ class GigaEmbeddingRetriever(BaseRetriever):
             if not hasattr(modeling_utils.PreTrainedModel, "all_tied_weights_keys"):
 
                 def get_tied(self):
-                    if not hasattr(self, "_tied_weights_keys"):
+                    if getattr(self, "_tied_weights_keys", None) is None:
                         self._tied_weights_keys = {}
                     return self._tied_weights_keys
 
                 def set_tied(self, value):
-                    self._tied_weights_keys = value
+                    # Never allow it to become None, as transformers calls .update() on it
+                    self._tied_weights_keys = value if value is not None else {}
 
                 setattr(
                     modeling_utils.PreTrainedModel,
