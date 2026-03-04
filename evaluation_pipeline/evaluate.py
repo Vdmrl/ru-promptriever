@@ -166,7 +166,6 @@ def prepare_queries_for_model(
     model_type: str,
     dataset_type: str,
     generic_instruction: str,
-    instruct_only: bool = False,
 ) -> Dict[str, str]:
     """Adjust queries based on model type and dataset type.
 
@@ -175,27 +174,12 @@ def prepare_queries_for_model(
         (baked into the query text). ALL models receive the same queries
         (this is the standard FollowIR protocol — p-MRR measures sensitivity).
 
-      - rumteb / en_mteb: queries have NO instructions. For CausalLM
-        (Promptriever) models, append the generic instruction to avoid OOD.
-
-      - instruct_only models: standard queries (without instruction) are
-        OOD because the model was *only* trained on instructed queries.
-        Add generic instruction to make them produce meaningful embeddings.
+      - rumteb: queries have NO instructions. For CausalLM (Promptriever)
+        models, append the generic instruction to avoid OOD. For encoders
+        and BM25, leave queries as-is.
     """
     if dataset_type in ("rumteb", "en_mteb") and model_type == "causal_lm":
         return {qid: f"{text} {generic_instruction}" for qid, text in queries.items()}
-
-    # instruct_only models: add generic instruction to standard queries
-    # (instructed queries already have instructions baked in)
-    if instruct_only and dataset_type in ("synthetic_test", "mfollowir"):
-        return {
-            qid: (
-                text
-                if qid.endswith("-instruct") or qid.endswith("_inst")
-                else f"{text} {generic_instruction}"
-            )
-            for qid, text in queries.items()
-        }
 
     return queries
 
@@ -428,7 +412,6 @@ def evaluate_dense_custom(
     batch_size: int = 32,
     top_k: int = 100,
     max_queries: int = None,
-    instruct_only: bool = False,
 ) -> Dict:
     """Evaluate a dense model on a custom task (synthetic_test, mfollowir).
 
@@ -441,11 +424,7 @@ def evaluate_dense_custom(
 
     # Adjust queries for model type
     queries = prepare_queries_for_model(
-        queries,
-        model_type,
-        dataset_type,
-        generic_instruction,
-        instruct_only=instruct_only,
+        queries, model_type, dataset_type, generic_instruction
     )
 
     if max_queries:
@@ -802,7 +781,6 @@ def main():
                                 generic_instruction,
                                 batch_size,
                                 max_queries=args.max_queries,
-                                instruct_only=model_cfg.get("instruct_only", False),
                             )
                             all_metrics["retrieval"] = metrics
 
