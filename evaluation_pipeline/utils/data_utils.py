@@ -134,15 +134,33 @@ def format_results_table(results: List[Dict[str, Any]]) -> str:
     return tabulate(rows, headers=headers, tablefmt="github")
 
 
-def _flatten_metrics(d: dict, prefix: str = "") -> Dict[str, float]:
-    """Recursively flatten nested metric dicts."""
+def _flatten_metrics(d: Any, prefix: str = "") -> Dict[str, float]:
+    """Recursively flatten nested metric dicts, adapting for MTEB 2.10+ lists."""
     flat = {}
-    for key, value in d.items():
-        full_key = f"{prefix}.{key}" if prefix else key
-        if isinstance(value, dict):
-            flat.update(_flatten_metrics(value, full_key))
-        elif isinstance(value, (int, float)):
-            flat[full_key] = float(value)
+    if isinstance(d, dict):
+        for key, value in d.items():
+            # Skip non-metric metadata fields from MTEB 2.10+ outputs
+            if key in [
+                "hf_subset",
+                "languages",
+                "dataset_revision",
+                "evaluation_time",
+                "main_score",
+            ]:
+                continue
+
+            full_key = f"{prefix}.{key}" if prefix else str(key)
+            if isinstance(value, dict):
+                flat.update(_flatten_metrics(value, full_key))
+            elif isinstance(value, list):
+                for item in value:
+                    flat.update(_flatten_metrics(item, full_key))
+            elif isinstance(value, (int, float)):
+                # Keep the simplest name possible for the table (like ndcg_at_10)
+                flat[str(key)] = float(value)
+    elif isinstance(d, list):
+        for item in d:
+            flat.update(_flatten_metrics(item, prefix))
     return flat
 
 
