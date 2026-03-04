@@ -110,7 +110,7 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
-        self.tokenizer.padding_side = "left"
+        self.tokenizer.padding_side = "right"
 
         logger.info(
             f"Loaded {model_name_or_path}, "
