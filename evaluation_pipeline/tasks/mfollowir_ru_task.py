@@ -112,7 +112,7 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
         # Original qrels (pre-instruction relevance)
         qrels_original_path = os.path.join(self.data_dir, "qrels_original_test.jsonl")
         if not os.path.exists(qrels_original_path):
-            self._download_qrels("qrels/test.jsonl", qrels_original_path)
+            self._download_qrels("qrels_og/test.jsonl", qrels_original_path)
 
         # Parse changed qrels → keyed by instructed query IDs
         relevant_docs = defaultdict(dict)
