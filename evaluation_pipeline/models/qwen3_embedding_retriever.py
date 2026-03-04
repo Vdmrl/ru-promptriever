@@ -76,6 +76,25 @@ class Qwen3EmbeddingRetriever(EncoderProtocol, BaseRetriever):
             elif "passage" not in prompts:
                 prompt_name = None
 
+        # MTEB 2.10+ passes sentences as a DataLoader — extract raw strings
+        from torch.utils.data import DataLoader as TorchDataLoader
+
+        if isinstance(sentences, TorchDataLoader):
+            texts = []
+            for batch in sentences:
+                if isinstance(batch, dict):
+                    batch_texts = batch.get("text", batch.get("sentence", []))
+                    texts.extend(
+                        batch_texts
+                        if isinstance(batch_texts, list)
+                        else list(batch_texts)
+                    )
+                elif isinstance(batch, (list, tuple)):
+                    texts.extend(batch)
+                else:
+                    texts.append(str(batch))
+            sentences = texts
+
         embeddings = self.model.encode(
             sentences,
             batch_size=batch_size,
