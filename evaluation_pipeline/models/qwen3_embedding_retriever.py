@@ -65,6 +65,15 @@ class Qwen3EmbeddingRetriever(BaseRetriever):
         Returns:
             np.ndarray of shape [len(sentences), hidden_dim], L2-normalized.
         """
+        # MTEB evaluate_dense_custom passes "passage" for documents
+        # but Qwen models use "document" as the prompt name
+        if prompt_name == "passage":
+            prompts = getattr(self.model, "prompts", {})
+            if "document" in prompts and "passage" not in prompts:
+                prompt_name = "document"
+            elif "passage" not in prompts:
+                prompt_name = None
+
         embeddings = self.model.encode(
             sentences,
             batch_size=batch_size,
