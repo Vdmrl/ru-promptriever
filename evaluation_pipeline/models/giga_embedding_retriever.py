@@ -29,6 +29,28 @@ class GigaEmbeddingRetriever(BaseRetriever):
         max_length: int = 4096,
         **kwargs,
     ):
+        # Monkeypatch for transformers >= 4.45 where ROPE_INIT_FUNCTIONS["default"] was removed.
+        # Giga-Embeddings' custom modeling_gigarembed.py hardcodes this key and crashes without it.
+        try:
+            import transformers.modeling_rope_utils as rope_utils
+
+            if (
+                hasattr(rope_utils, "ROPE_INIT_FUNCTIONS")
+                and "default" not in rope_utils.ROPE_INIT_FUNCTIONS
+            ):
+                # "default" was the old name for the standard linear/default RoPE
+                # fallback to "linear" if it exists, else we just grab the first available function.
+                if "linear" in rope_utils.ROPE_INIT_FUNCTIONS:
+                    rope_utils.ROPE_INIT_FUNCTIONS["default"] = (
+                        rope_utils.ROPE_INIT_FUNCTIONS["linear"]
+                    )
+                elif rope_utils.ROPE_INIT_FUNCTIONS:
+                    rope_utils.ROPE_INIT_FUNCTIONS["default"] = next(
+                        iter(rope_utils.ROPE_INIT_FUNCTIONS.values())
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to monkeypatch ROPE_INIT_FUNCTIONS: {e}")
+
         """
         Args:
             model_name_or_path: HF model ID.
