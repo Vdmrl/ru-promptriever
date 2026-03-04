@@ -179,8 +179,17 @@ def _flatten_metrics(d: Any, prefix: str = "") -> Dict[str, float]:
             if isinstance(value, dict):
                 flat.update(_flatten_metrics(value, full_key))
             elif isinstance(value, list):
-                for item in value:
-                    flat.update(_flatten_metrics(item, full_key))
+                # When we hit a list inside a dict (like the 'test' split list of dicts)
+                # We need to make sure we don't accidentally recurse and lose the prefix
+                if (
+                    len(value) > 0
+                    and isinstance(value[0], dict)
+                    and "task_name" in value[0]
+                ):
+                    flat.update(_flatten_metrics(value, full_key))
+                else:
+                    for item in value:
+                        flat.update(_flatten_metrics(item, full_key))
             elif isinstance(value, (int, float)):
                 # Keep the simplest name possible for the table (like ndcg_at_10)
                 flat[str(full_key)] = float(value)
