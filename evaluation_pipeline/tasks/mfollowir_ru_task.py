@@ -65,7 +65,13 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
         self.data_dir = data_dir
 
     def load_data(self, **kwargs):
-        """Load mFollowIR Russian data and NeuCLIR corpus."""
+        """Load mFollowIR Russian data and NeuCLIR corpus.
+
+        Creates two sets of queries for p-MRR computation:
+          - Standard queries (id: "<qid>") — topic text only
+          - Instructed queries (id: "<qid>_inst") — topic + narrative instruction
+        Both are stored in self.queries["test"] together.
+        """
         if self.data_loaded:
             return
 
@@ -76,6 +82,7 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
 
         logger.info(f"Loading mFollowIR-RU queries from {jsonl_path}")
         queries = {}
+        self._query_pairs = []  # (std_qid, inst_qid) for p-MRR
         with open(jsonl_path, "r", encoding="utf-8") as f:
             for line in f:
                 record = json.loads(line.strip())
@@ -83,51 +90,54 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
                 query_text = record.get("ht_text", "")
                 instruction = record.get("instruction_changed", "")
 
-                # Format: "{query} {instruction}" — same as Promptriever
+                # Standard query (topic only)
+                std_qid = query_id
+                queries[std_qid] = query_text
+
+                # Instructed query (topic + narrative)
+                inst_qid = f"{query_id}_inst"
                 if instruction:
-                    full_query = f"{query_text} {instruction}"
+                    queries[inst_qid] = f"{query_text} {instruction}"
                 else:
-                    full_query = query_text
+                    queries[inst_qid] = query_text
 
-                queries[query_id] = full_query
+                self._query_pairs.append((std_qid, inst_qid))
 
-        # --- Load correct QRELS from mFollowIR-rus-cl (qrels_changed) ---
-        qrels_path = os.path.join(self.data_dir, "qrels_changed_test.jsonl")
-        if not os.path.exists(qrels_path):
-            from huggingface_hub import hf_hub_download
+        # --- Load BOTH qrels: original (pre-instruction) and changed (post-instruction) ---
+        # Changed qrels (post-instruction relevance)
+        qrels_changed_path = os.path.join(self.data_dir, "qrels_changed_test.jsonl")
+        if not os.path.exists(qrels_changed_path):
+            self._download_qrels("qrels_changed/test.jsonl", qrels_changed_path)
 
-            logger.info("Downloading true qrels for mFollowIR...")
-            try:
-                hf_hub_download(
-                    repo_id="jhu-clsp/mFollowIR-rus-cl",
-                    filename="qrels_changed/test.jsonl",
-                    repo_type="dataset",
-                    local_dir=self.data_dir,
-                )
-                import shutil
+        # Original qrels (pre-instruction relevance)
+        qrels_original_path = os.path.join(self.data_dir, "qrels_original_test.jsonl")
+        if not os.path.exists(qrels_original_path):
+            self._download_qrels("qrels/test.jsonl", qrels_original_path)
 
-                shutil.move(
-                    os.path.join(self.data_dir, "qrels_changed", "test.jsonl"),
-                    qrels_path,
-                )
-            except Exception as e:
-                logger.error(f"Failed to download qrels: {e}")
-                raise
-
+        # Parse changed qrels → keyed by instructed query IDs
         relevant_docs = defaultdict(dict)
         required_doc_ids = set()
-        with open(qrels_path, "r", encoding="utf-8") as f:
+        with open(qrels_changed_path, "r", encoding="utf-8") as f:
+            for line in f:
+                record = json.loads(line.strip())
+                q_id = str(record["query-id"])
+                c_id = str(record["corpus-id"])
+                score = int(record["score"])
+                inst_qid = f"{q_id}_inst"
+                relevant_docs[inst_qid][c_id] = score
+                required_doc_ids.add(c_id)
+
+        # Parse original qrels → keyed by standard query IDs
+        with open(qrels_original_path, "r", encoding="utf-8") as f:
             for line in f:
                 record = json.loads(line.strip())
                 q_id = str(record["query-id"])
                 c_id = str(record["corpus-id"])
                 score = int(record["score"])
                 relevant_docs[q_id][c_id] = score
-                # Even if score <= 0, we should ensure the document is in the corpus
-                # for hard negative evaluation
                 required_doc_ids.add(c_id)
 
-        # --- Load NeuCLIR corpus and limit to 50k docs ---
+        # --- Load NeuCLIR corpus and limit to 20k docs ---
         full_corpus = self._load_neuclir_corpus()
 
         # We need to drop corpus size down from 4.6M to 20k to STRICTLY fit in 6h compute budget
@@ -147,10 +157,7 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
 
         remaining_slots = MAX_DOCS - len(corpus)
         if remaining_slots > 0:
-            # Sort the keys to ensure deterministic ordering before sampling,
-            # because set difference order relies on randomized string hashes.
             available_docs = sorted(list(full_corpus.keys() - corpus.keys()))
-            # Sample deterministically to ensure reproducibility
             random.seed(42)
             sampled_docs = random.sample(
                 available_docs, min(remaining_slots, len(available_docs))
@@ -160,7 +167,7 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
 
         logger.info(
             f"Loaded mFollowIR-RU: {len(corpus)} docs (TRUNCATED from {len(full_corpus)} for speed), "
-            f"{len(queries)} queries, "
+            f"{len(queries)} queries ({len(self._query_pairs)} pairs for p-MRR), "
             f"{sum(len(v) for v in relevant_docs.values())} judgments"
         )
 
@@ -168,6 +175,32 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
         self.queries = {"test": queries}
         self.relevant_docs = {"test": dict(relevant_docs)}
         self.data_loaded = True
+
+    def get_query_pairs(self):
+        """Return (std_query_id, inst_query_id) pairs for p-MRR computation."""
+        return self._query_pairs
+
+    def _download_qrels(self, hf_filename, local_path):
+        """Download a qrels file from mFollowIR-rus-cl on HuggingFace."""
+        from huggingface_hub import hf_hub_download
+
+        logger.info(f"Downloading {hf_filename} for mFollowIR...")
+        try:
+            hf_hub_download(
+                repo_id="jhu-clsp/mFollowIR-rus-cl",
+                filename=hf_filename,
+                repo_type="dataset",
+                local_dir=self.data_dir,
+            )
+            import shutil
+
+            # Move from nested directory to flat path
+            downloaded = os.path.join(self.data_dir, hf_filename)
+            if os.path.exists(downloaded):
+                shutil.move(downloaded, local_path)
+        except Exception as e:
+            logger.error(f"Failed to download {hf_filename}: {e}")
+            raise
 
     def _download_mfollowir(self):
         """Download mFollowIR Russian data from HuggingFace."""

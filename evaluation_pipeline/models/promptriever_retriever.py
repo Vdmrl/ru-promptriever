@@ -71,9 +71,11 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         self.passage_prefix = passage_prefix
 
         torch_dtype = getattr(torch, dtype, torch.bfloat16)
+        self._is_peft = False  # Will be set to True if PEFT model detected
         logger.info(f"Loading CausalLM: {model_name_or_path} ({dtype})")
 
         if _is_peft_model(model_name_or_path):
+            self._is_peft = True
             logger.info(
                 "Detected PEFT/LoRA model. Loading base model + merging LoRA..."
             )
@@ -113,9 +115,36 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         self.tokenizer.padding_side = "right"
 
         logger.info(
-            f"Loaded {model_name_or_path}, "
+            f"Loaded {model_name_or_path} (peft={self._is_peft}), "
             f"hidden_size={self.model.config.hidden_size}, "
             f"dtype={torch_dtype}"
+        )
+
+    def _tokenize_with_eos(self, texts, max_length):
+        """Official Promptriever tokenization: truncate, append EOS, then pad.
+
+        The original samaya-ai Promptriever models were trained with explicit
+        EOS appending after truncation. This ensures the last-token-pool
+        always reads from an EOS position, as the model was trained to produce
+        sentence embeddings at that position.
+        """
+        batch_dict = self.tokenizer(
+            texts,
+            max_length=max_length - 1,
+            return_token_type_ids=False,
+            return_attention_mask=False,
+            padding=False,
+            truncation=True,
+        )
+        batch_dict["input_ids"] = [
+            ids + [self.tokenizer.eos_token_id] for ids in batch_dict["input_ids"]
+        ]
+        return self.tokenizer.pad(
+            batch_dict,
+            padding=True,
+            pad_to_multiple_of=8,
+            return_attention_mask=True,
+            return_tensors="pt",
         )
 
     @torch.no_grad()
@@ -157,13 +186,24 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         for start in trange(0, len(sentences), batch_size, desc="Encoding"):
             batch_texts = sentences[start : start + batch_size]
 
-            inputs = self.tokenizer(
-                batch_texts,
-                padding=True,
-                truncation=True,
-                max_length=self.max_length,
-                return_tensors="pt",
-            ).to(self.model.device)
+            if self._is_peft:
+                # Official Promptriever tokenization protocol:
+                # 1. Truncate to max_length - 1 (leave room for EOS)
+                # 2. Manually append EOS token
+                # 3. Pad to uniform length
+                inputs = self._tokenize_with_eos(batch_texts, self.max_length).to(
+                    self.model.device
+                )
+            else:
+                # Merged models (e.g. ru-promptriever): standard tokenization
+                # matches how the model was trained (RetrieverCollator)
+                inputs = self.tokenizer(
+                    batch_texts,
+                    padding=True,
+                    truncation=True,
+                    max_length=self.max_length,
+                    return_tensors="pt",
+                ).to(self.model.device)
 
             if hasattr(self.model, "lm_head"):
                 # AutoModelForCausalLM path: bypass lm_head with Identity

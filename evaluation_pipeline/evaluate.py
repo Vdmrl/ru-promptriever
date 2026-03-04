@@ -380,7 +380,16 @@ def evaluate_bm25(
 
     model.index_corpus(corpus)
     results = model.retrieve(queries, top_k=top_k)
-    metrics = compute_retrieval_metrics(relevant_docs, results)
+
+    # For mFollowIR, compute ndcg only on instructed queries (_inst suffix)
+    if isinstance(task, MFollowIRRuRetrieval):
+        inst_results = {qid: r for qid, r in results.items() if qid.endswith("_inst")}
+        inst_qrels = {
+            qid: q for qid, q in relevant_docs.items() if qid.endswith("_inst")
+        }
+        metrics = compute_retrieval_metrics(inst_qrels, inst_results)
+    else:
+        metrics = compute_retrieval_metrics(relevant_docs, results)
     return metrics
 
 
@@ -422,7 +431,17 @@ def evaluate_dense_custom(
         corpus = _trim_corpus_for_smoke_test(corpus, relevant_docs)
 
     results = _dense_retrieve(model, queries, corpus, batch_size, top_k)
-    metrics = compute_retrieval_metrics(relevant_docs, results)
+
+    # For mFollowIR, compute ndcg only on instructed queries (_inst suffix)
+    # Standard queries are only used for p-MRR comparison
+    if isinstance(task, MFollowIRRuRetrieval):
+        inst_results = {qid: r for qid, r in results.items() if qid.endswith("_inst")}
+        inst_qrels = {
+            qid: q for qid, q in relevant_docs.items() if qid.endswith("_inst")
+        }
+        metrics = compute_retrieval_metrics(inst_qrels, inst_results)
+    else:
+        metrics = compute_retrieval_metrics(relevant_docs, results)
     return results, metrics
 
 
@@ -506,12 +525,13 @@ def evaluate_with_mteb(
 
 
 def evaluate_pmrr_synthetic(
-    task: RuPrompTrieverTestRetrieval,
+    task,
     all_results: Dict[str, Dict[str, float]],
 ) -> float:
     """Compute p-MRR from pre-computed retrieval results.
 
-    Uses query pairs from the synthetic test set.
+    Uses query pairs from any task that implements get_query_pairs().
+    Works with both RuPrompTrieverTestRetrieval and MFollowIRRuRetrieval.
     """
     pairs = task.get_query_pairs()
     if not pairs:
@@ -737,7 +757,10 @@ def main():
                             all_metrics["retrieval"] = bm25_metrics
 
                             # p-MRR for BM25: retrieve all queries using already-indexed corpus
-                            if isinstance(task, RuPrompTrieverTestRetrieval):
+                            if isinstance(
+                                task,
+                                (RuPrompTrieverTestRetrieval, MFollowIRRuRetrieval),
+                            ):
                                 task.load_data()
                                 queries = task.queries["test"]
                                 bm25_results = model.retrieve(queries, top_k=100)
@@ -757,7 +780,10 @@ def main():
                             all_metrics["retrieval"] = metrics
 
                             # p-MRR for dense models
-                            if isinstance(task, RuPrompTrieverTestRetrieval):
+                            if isinstance(
+                                task,
+                                (RuPrompTrieverTestRetrieval, MFollowIRRuRetrieval),
+                            ):
                                 pmrr = evaluate_pmrr_synthetic(task, retrieval_results)
                                 all_metrics["p_mrr"] = pmrr
                                 logger.info(f"p-MRR: {pmrr:.2f}")
