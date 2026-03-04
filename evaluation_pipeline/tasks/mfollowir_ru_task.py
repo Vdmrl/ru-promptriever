@@ -147,7 +147,9 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
 
         remaining_slots = MAX_DOCS - len(corpus)
         if remaining_slots > 0:
-            available_docs = list(full_corpus.keys() - corpus.keys())
+            # Sort the keys to ensure deterministic ordering before sampling,
+            # because set difference order relies on randomized string hashes.
+            available_docs = sorted(list(full_corpus.keys() - corpus.keys()))
             # Sample deterministically to ensure reproducibility
             random.seed(42)
             sampled_docs = random.sample(
