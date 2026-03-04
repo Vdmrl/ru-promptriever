@@ -151,6 +151,25 @@ class GigaEmbeddingRetriever(EncoderProtocol, BaseRetriever):
         """
         prompt = self.query_prompt if prompt_name == "query" else ""
 
+        # MTEB 2.10+ may pass a DataLoader instead of List[str]
+        from torch.utils.data import DataLoader as TorchDataLoader
+
+        if isinstance(sentences, TorchDataLoader):
+            texts = []
+            for batch in sentences:
+                if isinstance(batch, dict):
+                    batch_texts = batch.get("text", batch.get("sentence", []))
+                    texts.extend(
+                        batch_texts
+                        if isinstance(batch_texts, list)
+                        else list(batch_texts)
+                    )
+                elif isinstance(batch, (list, tuple)):
+                    texts.extend(batch)
+                else:
+                    texts.append(str(batch))
+            sentences = texts
+
         embeddings = self.model.encode(
             sentences,
             batch_size=batch_size,

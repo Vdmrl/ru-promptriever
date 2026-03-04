@@ -55,6 +55,7 @@ models:
     model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b"
     batch_size: 4
     max_length: 512
+    instruct_only: true   # Model trained ONLY on instructed queries; standard queries get generic instruction
 
   - name: "giga-embeddings-instruct"
     type: "giga_embedding"
