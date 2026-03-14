@@ -1,0 +1,22 @@
+model_info:
+  #  Options: 'gigachat' or 'openai'
+  #  'openai' works for OpenAI, OpenRouter, DeepSeek, vLLM, etc.
+  provider: "gigachat"
+
+  temperature: 0
+
+  #  Gigachat configuration (Active)
+  "BASE_URL": "https://tslew-mvp000003.esrt.sber.ru/gigachat/v1"
+  "CERT_FILE": "/home/asup_dev/certs/cert.pem"
+  "KEY_FILE": "/home/asup_dev/certs/key.pem"
+  "MODEL_NAME": "GigaChat-2-Lite"
+  "VERIFY_SSL_CERTS": False
+  "PROFANITY_CHECK": False
+  "TIMEOUT": 360
+  #  "AUTH_DATA": "your_auth_key_if_needed"
+  #  "SCOPE": "GIGACHAT_API_PERS"
+
+  #  other router configuration
+  #  "OPENAI_API_KEY": "sk-or-v1-..."
+  #  "OPENAI_API_BASE": "https://openrouter.ai/api/v1"
+  #  "OPENAI_MODEL_NAME": "deepseek/deepseek-r1"

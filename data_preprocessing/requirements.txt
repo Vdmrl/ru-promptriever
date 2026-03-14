@@ -1,0 +1,8 @@
+vllm>=0.6.0
+pyyaml
+tqdm
+bm25s
+PyStemmer
+pandas
+pyarrow
+transformers>=4.40.0
