@@ -14,10 +14,12 @@ The pipeline consists of the following stages:
 
 1. **Data Curation:** Using the Russian split of the mMARCO dataset as the source.
 2. **Synthetic Data Generation:**
-   * Generating specific instructions for existing queries using LLMs.
+   * Generating specific instructions for existing queries using LLMs (GigaChat-2-Max).
    * Mining "Instruction Negatives" — synthetic documents that are relevant to the query but irrelevant to the specific instruction.
-3. **Filtration:** Validating synthetic triplets using a multilingual Cross-Encoder.
-4. **Training:** Fine-tuning a backbone LLM (Qwen3 8b) as a bi-encoder using the curated dataset.
+3. **Filtration:** 
+   * Validating synthetic triplets using an LLM-based pipeline (`GigaChat-2-Lite`) to filter out bad positive matches and weak negatives.
+   * Ensuring negatives genuinely violate the generated instructions.
+4. **Training:** Fine-tuning a backbone LLM (Qwen3 8b/4b) as a bi-encoder using the curated dataset.
 
 ## References
 
@@ -47,6 +49,28 @@ export WANDB_API_KEY="your_api_key_here"
 ```bash
 # 6. Run training script
 torchrun --nproc_per_node=2 train.py --config configs/v0.2_optimized4b_2_5090.yaml
+```
+
+## Data Preprocessing Pipeline
+
+To run the data generation and filtering pipeline locally (e.g., preparing the dataset before training):
+
+```bash
+cd ru-promptriever/data_preprocessing
+
+# 1. Install specific requirements
+pip install -r requirements.txt
+
+# 2. Filter synthetic data using LLM
+# Be sure to set your GigaChat credentials in configs/config.yaml
+python filter_data.py --input_dir data/input --output_dir data/output_filtered
+
+# 3. Recover missing triplets (optional)
+# Use this if you have filtered out queries and want to re-run them
+python extract_missing_triplets.py
+
+# 4. Build the final training/eval dataset (creates parquet files)
+python build_dataset.py --filtered_dir data/output_filtered --output_dir data/output_final_dataset
 ```
 
 ## Post-Training
