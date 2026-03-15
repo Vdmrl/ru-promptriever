@@ -59,21 +59,19 @@ torchrun --nproc_per_node=2 train.py --config configs/v0.2_optimized4b_2_5090.ya
 To run the data generation and filtering pipeline locally (e.g., preparing the dataset before training):
 
 ```bash
-cd ru-promptriever/data_preprocessing
-
 # 1. Install specific requirements
-pip install -r requirements.txt
+pip install -r data_preprocessing/requirements.txt
 
 # 2. Filter synthetic data using LLM
 # Be sure to set your GigaChat credentials in configs/config.yaml
-python filter_data.py --input_dir data/input --output_dir data/output_filtered
+python data_preprocessing/filter_data.py --input_dir data_preprocessing/data/input --output_dir data_preprocessing/data/output_filtered
 
 # 3. Recover missing triplets (optional)
 # Use this if you have filtered out queries and want to re-run them
-python extract_missing_triplets.py
+python data_preprocessing/extract_missing_triplets.py
 
 # 4. Build the final training/eval dataset (creates parquet files) and optionally upload to Hugging Face
-python build_dataset.py --filtered_dir data/output_filtered --output_dir data/output_final_dataset --push_to_hub "Vladimirlv/ru-promptriever-dataset-v0.2"
+python data_preprocessing/build_dataset.py --filtered_dir data_preprocessing/data/output_filtered --output_dir data_preprocessing/data/output_final_dataset --push_to_hub "Vladimirlv/ru-promptriever-dataset"
 ```
 
 ## Post-Training
