@@ -49,6 +49,9 @@ export WANDB_API_KEY="your_api_key_here"
 ```bash
 # 6. Run training script
 torchrun --nproc_per_node=2 train.py --config configs/v0.2_optimized4b_2_5090.yaml
+
+# 7. (Optional) Train with duplicated queries included
+torchrun --nproc_per_node=2 train.py --config configs/v0.2_optimized4b_2_5090.yaml --use-repeated
 ```
 
 ## Data Preprocessing Pipeline
@@ -71,6 +74,9 @@ python extract_missing_triplets.py
 
 # 4. Build the final training/eval dataset (creates parquet files)
 python build_dataset.py --filtered_dir data/output_filtered --output_dir data/output_final_dataset
+
+# 5. Build dataset including the extended research dataset version
+python build_dataset.py --filtered_dir data/output_filtered --output_dir data/output_final_dataset --include_research_dataset
 ```
 
 ## Post-Training
