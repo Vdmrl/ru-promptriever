@@ -658,11 +658,6 @@ def main():
         default=None,
         help="Hugging Face Dataset repo ID for automatic intermediate uploads (e.g. 'Vladimirlv/my-results').",
     )
-    parser.add_argument(
-        "--no-print-results",
-        action="store_true",
-        help="Disable printing the final summary table.",
-    )
 
     args = parser.parse_args()
 
@@ -819,8 +814,7 @@ def main():
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-    if not args.no_print_results:
-        print_summary_table(output_dir)
+    print_summary_table(output_dir)
 
 
 if __name__ == "__main__":

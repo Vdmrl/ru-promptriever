@@ -354,7 +354,10 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    input_files = get_jsonl_files(args.filtered_dir)
+    all_input_files = get_jsonl_files(args.filtered_dir)
+    input_files = [f for f in all_input_files if not os.path.basename(f).startswith("deleted_")]
+    
+    print(f"Discovered {len(all_input_files)} total .jsonl files. Using {len(input_files)} valid data chunks.")
 
     # ========================
     # Stage 1: Read all records

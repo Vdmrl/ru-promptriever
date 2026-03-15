@@ -47,7 +47,7 @@ models:
   - name: "qwen3-embedding-4b"
     type: "qwen3_embedding"
     model_name_or_path: "Qwen/Qwen3-Embedding-4B"
-    batch_size: 1
+    batch_size: 4
     max_length: 8192
 
   - name: "ru-promptriever-qwen3-4b"
