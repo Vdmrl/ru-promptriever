@@ -74,9 +74,6 @@ python extract_missing_triplets.py
 
 # 4. Build the final training/eval dataset (creates parquet files)
 python build_dataset.py --filtered_dir data/output_filtered --output_dir data/output_final_dataset
-
-# 4. (Optional) Compile with the extended research dataset included
-# python build_dataset.py --filtered_dir data/output_filtered --output_dir data/output_final_dataset --include_research_dataset
 ```
 
 ## Post-Training
