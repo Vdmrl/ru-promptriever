@@ -72,8 +72,8 @@ python filter_data.py --input_dir data/input --output_dir data/output_filtered
 # Use this if you have filtered out queries and want to re-run them
 python extract_missing_triplets.py
 
-# 4. Build the final training/eval dataset (creates parquet files)
-python build_dataset.py --filtered_dir data/output_filtered --output_dir data/output_final_dataset
+# 4. Build the final training/eval dataset (creates parquet files) and optionally upload to Hugging Face
+python build_dataset.py --filtered_dir data/output_filtered --output_dir data/output_final_dataset --push_to_hub "Vladimirlv/ru-promptriever-dataset-v0.2"
 ```
 
 ## Post-Training
