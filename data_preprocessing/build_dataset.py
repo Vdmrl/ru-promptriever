@@ -314,6 +314,12 @@ def main():
         required=True,
         help="Directory to save the dataset repository in HF format",
     )
+    parser.add_argument(
+        "--push_to_hub",
+        type=str,
+        default=None,
+        help="Hugging Face repo ID to automatically upload the dataset (e.g. 'Vladimirlv/my-dataset').",
+    )
 
     parser.add_argument(
         "--raw",
@@ -499,6 +505,20 @@ def main():
     )
     print(f"Total: {len(train_df) + len(val_df) + len(test_df)} rows generated (incl. instruct variations).")
 
+    if args.push_to_hub:
+        print(f"\nUploading dataset to Hugging Face: {args.push_to_hub}...")
+        try:
+            from huggingface_hub import HfApi
+            api = HfApi()
+            api.create_repo(repo_id=args.push_to_hub, repo_type="dataset", exist_ok=True)
+            api.upload_folder(
+                folder_path=args.output_dir,
+                repo_id=args.push_to_hub,
+                repo_type="dataset",
+            )
+            print("✓ Upload complete!")
+        except Exception as e:
+            print(f"✗ Failed to upload to Hugging Face: {e}")
 
 if __name__ == "__main__":
     main()
