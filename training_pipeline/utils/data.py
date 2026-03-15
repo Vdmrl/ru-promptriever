@@ -37,6 +37,7 @@ class RetrieverDataset(Dataset):
         num_negatives: int = 7,
         num_instruct_negatives: int = 3,
         instruct_only: bool = False,
+        use_repeated: bool = False,
         seed: int = 42,
     ):
         self.num_negatives = num_negatives
@@ -53,10 +54,16 @@ class RetrieverDataset(Dataset):
             "parquet", data_files={"train": local_path}, split="train"
         )
 
+        # Filter deduplicates by default (unless --use_repeated is passed and is_repeated exists in data)
+        if not use_repeated and "is_repeated" in self.dataset.column_names:
+            before_repeats = len(self.dataset)
+            self.dataset = self.dataset.filter(lambda x: not x["is_repeated"])
+            print(f"[data] Removed repeated queries: {before_repeats} → {len(self.dataset)} rows")
+
         # Filter to instruction-augmented rows only (halves the dataset).
         if instruct_only:
             before = len(self.dataset)
-            self.dataset = self.dataset.filter(lambda x: x["has_instruction"])
+            self.dataset = self.dataset.filter(lambda x: x.get("has_instruction", False))
             print(f"[data] instruct_only filter: {before} → {len(self.dataset)} rows")
 
     @staticmethod
@@ -99,11 +106,14 @@ class RetrieverDataset(Dataset):
         row = self.dataset[idx]
 
         # --- Query ---
-        # Reassemble in Promptriever format: {query} {instruction}
-        if row.get("has_instruction") and row.get("only_instruction"):
-            query = f"{row['only_query']} {row['only_instruction']}"
+        # Read pre-assembled query if available (the new approach), else fallback to old concatenation
+        if "query" in row:
+             query = row["query"]
         else:
-            query = row["only_query"]
+            if row.get("has_instruction") and row.get("only_instruction"):
+                query = f"{row['only_query']} {row['only_instruction']}"
+            else:
+                query = row["only_query"]
 
         # --- Positive passage ---
         pos_list = row.get("positive_passages", [])

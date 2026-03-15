@@ -156,6 +156,7 @@ def train(cfg: dict) -> None:
         num_negatives=cfg.get("num_negatives", 7),
         num_instruct_negatives=cfg.get("num_instruct_negatives", 3),
         instruct_only=cfg.get("instruct_only", False),
+        use_repeated=cfg.get("use_repeated", False),
     )
 
     eval_dataset = None
@@ -166,6 +167,7 @@ def train(cfg: dict) -> None:
             num_negatives=cfg.get("num_negatives", 7),
             num_instruct_negatives=cfg.get("num_instruct_negatives", 3),
             instruct_only=cfg.get("instruct_only", False),
+            use_repeated=cfg.get("use_repeated", False),
         )
         print(f"[data] Loaded {len(eval_dataset)} validation examples")
 
@@ -297,10 +299,20 @@ def main():
         required=True,
         help="Path to YAML config file (e.g. configs/test_v100.yaml)",
     )
+    parser.add_argument(
+        "--use-repeated",
+        action="store_true",
+        help="Whether to include duplicated copies of repeated queries in the dataset",
+    )
     # Allow DeepSpeed to inject its own CLI arguments
     args, unknown = parser.parse_known_args()
 
     cfg = load_config(args.config)
+    
+    # Override config with parsed CLI args
+    if args.use_repeated:
+        cfg["use_repeated"] = True
+        
     train(cfg)
 
 
