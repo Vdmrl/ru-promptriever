@@ -452,4 +452,4 @@ class RetrieverTrainer(Trainer):
         if self.deepspeed:
             self.deepspeed.step()
 
-        return loss.detach() / self.args.gradient_accumulation_steps
+        return loss.detach()
