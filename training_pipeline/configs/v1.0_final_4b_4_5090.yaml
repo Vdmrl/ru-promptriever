@@ -66,6 +66,7 @@ per_device_eval_batch_size: 2
 logging_steps: 10
 save_strategy: "steps"
 save_steps: 250
+save_total_limit: 3                    # Keep only 3 latest checkpoints locally (older ones are on HF Hub)
 push_to_hub: true
 gradient_checkpointing: true
 dataloader_num_workers: 4

@@ -201,6 +201,7 @@ def train(cfg: dict) -> None:
         logging_steps=cfg.get("logging_steps", 10),
         save_strategy=cfg.get("save_strategy", "steps"),
         save_steps=cfg.get("save_steps", 100),
+        save_total_limit=cfg.get("save_total_limit", None),
         push_to_hub=cfg.get("push_to_hub", False),
         hub_model_id=cfg.get("hub_model_id", None),
         hub_token=os.environ.get("HF_TOKEN", None),  # HF_TOKEN env var is standard
