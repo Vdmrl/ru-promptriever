@@ -36,7 +36,7 @@ eval_split: "validation"
 instruct_only: false                   # Full ~1M dataset (standard + instruction rows)
 num_negatives: 30                      # Paper: 30 negatives per query
 num_instruct_negatives: 3              # Up to 3 instruction negatives (instruct rows only)
-max_len_query: 304
+max_len_query: 512                     # Bumped to 512 to guarantee 1.5k character instructions fit safely
 max_len_passage: 256
 
 # --- GradCache ---
