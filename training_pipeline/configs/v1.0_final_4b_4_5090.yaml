@@ -1,0 +1,77 @@
+# =============================================================================
+# Experiment 3 (Final): Qwen3-4B with full Promptriever recipe
+# Config for final training on 4x RTX 5090
+# Launch: torchrun --nproc_per_node=4 train.py --config configs/v1.0_final_4b_4_5090.yaml
+# =============================================================================
+
+# --- General Hub & Logging ---
+hub_model_id: "Vladimirlv/ru-promptriever-qwen3-4b"
+wandb_project: "ru-promptriever"
+run_name: "experiment_3_final"
+output_dir: "./output_ru-promptriever-qwen3-4b"
+
+# --- Model ---
+model_name_or_path: "Qwen/Qwen3-4B"
+attn_implementation: "sdpa"
+torch_dtype: "bfloat16"
+
+# --- LoRA Configuration ---
+# All 7 targets from the Promptriever paper (Appendix B): attention + MLP
+lora_r: 32
+lora_alpha: 64
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# --- Data ---
+train_data_path: "Vladimirlv/ru-promptriever-dataset"
+eval_data_path: "Vladimirlv/ru-promptriever-dataset"
+train_split: "train"
+eval_split: "validation"
+instruct_only: false                   # Full ~1M dataset (standard + instruction rows)
+num_negatives: 30                      # Paper: 30 negatives per query
+num_instruct_negatives: 3              # Up to 3 instruction negatives (instruct rows only)
+max_len_query: 304
+max_len_passage: 256
+
+# --- GradCache ---
+# With 30 negatives (31 passages/query), chunk_size=2 -> 62 passages per chunk.
+# If OOM, reduce to 1.
+gc_chunk_size: 2
+
+# --- Training ---
+# Effective batch = per_device x accum x gpus = 8 x 4 x 4 = 128 (matches paper)
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 4
+
+tf32: true
+num_train_epochs: 1
+max_steps: -1
+learning_rate: 1.0e-4
+warmup_steps: 100
+fp16: false
+bf16: true
+load_in_4bit: false
+
+# --- Evaluation ---
+# Set to 10 initially to verify eval works, then increase to ~250 for production
+evaluation_strategy: "steps"
+eval_steps: 10
+per_device_eval_batch_size: 2
+
+logging_steps: 10
+save_strategy: "steps"
+save_steps: 500
+push_to_hub: true
+gradient_checkpointing: true
+dataloader_num_workers: 4
+temperature: 0.01
+
+# --- Logging Auth ---
+report_to: "wandb"
+wandb_key: null

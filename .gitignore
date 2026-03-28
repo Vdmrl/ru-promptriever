@@ -162,3 +162,11 @@ cython_debug/
 
 *.json
 *.jsonl
+
+# Legacy preprocessing and throwaway code
+data_preprocessing_legacy/
+data_preprocessing/reformat_parquet.py
+
+# Generated dataset folders
+data_preprocessing/data/
+data_generation/data/

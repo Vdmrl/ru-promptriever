@@ -153,6 +153,7 @@ def train(cfg: dict) -> None:
     # 4. Data
     train_dataset = RetrieverDataset(
         data_path=cfg["train_data_path"],
+        split=cfg.get("train_split", "train"),
         num_negatives=cfg.get("num_negatives", 7),
         num_instruct_negatives=cfg.get("num_instruct_negatives", 3),
         instruct_only=cfg.get("instruct_only", False),
@@ -161,9 +162,10 @@ def train(cfg: dict) -> None:
 
     eval_dataset = None
     eval_path = cfg.get("eval_data_path")
-    if eval_path and (eval_path.startswith("hf://") or os.path.exists(eval_path)):
+    if eval_path:
         eval_dataset = RetrieverDataset(
             data_path=eval_path,
+            split=cfg.get("eval_split", "validation"),
             num_negatives=cfg.get("num_negatives", 7),
             num_instruct_negatives=cfg.get("num_instruct_negatives", 3),
             instruct_only=cfg.get("instruct_only", False),
@@ -184,6 +186,8 @@ def train(cfg: dict) -> None:
     training_args = TrainingArguments(
         output_dir=cfg.get("output_dir", "./output_model"),
         per_device_train_batch_size=cfg.get("per_device_train_batch_size", 1),
+        per_device_eval_batch_size=cfg.get("per_device_eval_batch_size",
+                                           cfg.get("per_device_train_batch_size", 1)),
         gradient_accumulation_steps=cfg.get("gradient_accumulation_steps", 16),
         num_train_epochs=cfg.get("num_train_epochs", 1),
         max_steps=cfg.get("max_steps", -1),

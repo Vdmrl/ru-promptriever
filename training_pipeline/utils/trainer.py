@@ -390,20 +390,39 @@ class RetrieverTrainer(Trainer):
             )
         return self._gc
 
+    def _get_encoder_wrapper(self, model) -> EncoderWrapper:
+        """Get or create an EncoderWrapper for the given model."""
+        if getattr(self, "_current_wrapped_model", None) is not model:
+            self._current_wrapped_model = model
+            self._encoder_wrapper = EncoderWrapper(model)
+        return self._encoder_wrapper
+
     def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         """
-        Compute contrastive loss via GradCache.
+        Compute contrastive loss.
+
+        During training, uses GradCache to split the batch into sub-batches.
+        During evaluation, performs a direct forward pass without GradCache
+        to avoid .backward() crashes inside torch.no_grad().
         """
         queries = inputs["queries"]
         passages = inputs["passages"]
 
+        if not model.training:
+            # --- Evaluation: direct forward pass, no GradCache ---
+            wrapper = self._get_encoder_wrapper(model)
+            q_reps = wrapper(**queries)
+            p_reps = wrapper(**passages)
+            loss_fn = ContrastiveLoss(temperature=self.temperature)
+            loss = loss_fn(q_reps, p_reps)
+            return (loss, None) if return_outputs else loss
+
+        # --- Training: use GradCache ---
         gc = self._get_gc(queries, passages)
 
         # Dynamically ensure gc uses the current (potentially DDP-wrapped) model
-        if getattr(self, "_current_wrapped_model", None) is not model:
-            self._current_wrapped_model = model
-            self._encoder_wrapper = EncoderWrapper(model)
-            gc.models = [self._encoder_wrapper, self._encoder_wrapper]
+        wrapper = self._get_encoder_wrapper(model)
+        gc.models = [wrapper, wrapper]
 
         # Pass no_sync_except_last=True to optimize DDP accumulation
         loss = gc(queries, passages, no_sync_except_last=True)

@@ -5,6 +5,7 @@ RetrieverDataset  — loads parquet, returns (query, positive, negatives) per ro
 RetrieverCollator — tokenizes and flattens passages into a single batch for GradCache.
 """
 
+import os
 import random
 from dataclasses import dataclass
 from typing import List
@@ -34,6 +35,7 @@ class RetrieverDataset(Dataset):
     def __init__(
         self,
         data_path: str,
+        split: str = "train",
         num_negatives: int = 7,
         num_instruct_negatives: int = 3,
         instruct_only: bool = False,
@@ -45,14 +47,8 @@ class RetrieverDataset(Dataset):
         self.num_hard_negatives = num_negatives - num_instruct_negatives
         self.rng = random.Random(seed)
 
-        # Resolve hf:// URIs to local cached paths via hf_hub_download.
-        # Format: hf://datasets/<user>/<repo>/<filepath>
-        local_path = self._resolve_data_path(data_path)
-
-        # HF Datasets uses memory-mapping (Apache Arrow) — ~0 RAM overhead.
-        self.dataset = load_dataset(
-            "parquet", data_files={"train": local_path}, split="train"
-        )
+        # Load data: support HF repo IDs, hf:// URIs, and local file paths.
+        self.dataset = self._load_data(data_path, split)
 
         # Filter deduplicates by default (unless --use_repeated is passed and is_repeated exists in data)
         if not use_repeated and "is_repeated" in self.dataset.column_names:
@@ -67,11 +63,20 @@ class RetrieverDataset(Dataset):
             print(f"[data] instruct_only filter: {before} → {len(self.dataset)} rows")
 
     @staticmethod
-    def _resolve_data_path(data_path: str) -> str:
-        """Download from HF Hub if hf:// URI, otherwise return as-is."""
+    def _load_data(data_path: str, split: str = "train"):
+        """Load dataset from HF repo ID, hf:// URI, or local file path."""
+        # 1. Direct HF repo ID (e.g. "Vladimirlv/ru-promptriever-dataset")
+        if (
+            "/" in data_path
+            and not data_path.startswith("hf://")
+            and not os.path.exists(data_path)
+        ):
+            print(f"[data] Loading HF dataset '{data_path}' split='{split}'...")
+            return load_dataset(data_path, split=split)
+
+        # 2. Legacy hf:// URI (e.g. "hf://datasets/user/repo/file.parquet")
         if data_path.startswith("hf://datasets/"):
-            # hf://datasets/Vladimirlv/repo-name/path/to/file.parquet
-            remainder = data_path[len("hf://datasets/") :]
+            remainder = data_path[len("hf://datasets/"):]
             parts = remainder.split("/", 2)  # [user, repo, filepath]
             if len(parts) < 3:
                 raise ValueError(
@@ -87,8 +92,12 @@ class RetrieverDataset(Dataset):
                 repo_type="dataset",
             )
             print(f"[data] Cached at: {local_path}")
-            return local_path
-        return data_path
+            data_path = local_path
+
+        # 3. Local file path
+        return load_dataset(
+            "parquet", data_files={"train": data_path}, split="train"
+        )
 
     def __len__(self) -> int:
         return len(self.dataset)
@@ -129,33 +138,41 @@ class RetrieverDataset(Dataset):
         if neg_list is None:
             neg_list = []
 
-        # Split negatives by type: instruction vs hard/BM25
-        # In the original Promptriever schema, instruction negatives are exclusively in 'new_negatives'.
-        instruct_negs_raw = row.get("new_negatives", [])
-        if instruct_negs_raw is None:
-            instruct_negs_raw = []
-            
-        instruct_negs = [self._format_passage(n) for n in instruct_negs_raw]
-        
         # negative_passages exclusively contains hard negatives
         hard_negs = [self._format_passage(n) for n in neg_list]
 
-        # Sample the requested number of each type
-        n_inst = min(self.num_instruct_negatives, len(instruct_negs))
-        n_hard = min(self.num_hard_negatives, len(hard_negs))
+        # Instruction negatives (new_negatives) are ONLY used for rows WITH instruction.
+        # For has_instruction=false rows, instruct-negatives are query-positive
+        # (they were designed to be relevant to the query but violate the instruction).
+        # Using them as negatives without instruction would corrupt training.
+        has_instruction = row.get("has_instruction", False)
 
-        sampled_inst = self.rng.sample(instruct_negs, n_inst) if n_inst > 0 else []
+        if has_instruction:
+            instruct_negs_raw = row.get("new_negatives", []) or []
+            instruct_negs = [self._format_passage(n) for n in instruct_negs_raw]
+            n_inst = min(self.num_instruct_negatives, len(instruct_negs))
+            sampled_inst = self.rng.sample(instruct_negs, n_inst) if n_inst > 0 else []
+        else:
+            instruct_negs = []
+            sampled_inst = []
+
+        # Fill the rest from hard negatives
+        n_hard_needed = self.num_negatives - len(sampled_inst)
+        n_hard = min(n_hard_needed, len(hard_negs))
         sampled_hard = self.rng.sample(hard_negs, n_hard) if n_hard > 0 else []
 
-        # If one type is short, fill from the other
+        # If still short, fill from remaining hard negatives
         deficit = self.num_negatives - len(sampled_inst) - len(sampled_hard)
-        if deficit > 0:
+        if deficit > 0 and has_instruction:
             remaining_inst = [x for x in instruct_negs if x not in sampled_inst]
             remaining_hard = [x for x in hard_negs if x not in sampled_hard]
             remaining = remaining_hard + remaining_inst
             fill = remaining[:deficit]
             sampled_hard.extend(fill)
-            deficit -= len(fill)
+        elif deficit > 0:
+            remaining_hard = [x for x in hard_negs if x not in sampled_hard]
+            fill = remaining_hard[:deficit]
+            sampled_hard.extend(fill)
 
         negatives = sampled_inst + sampled_hard
 
