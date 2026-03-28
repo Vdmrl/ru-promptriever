@@ -84,7 +84,7 @@ def build_model(cfg: dict):
     if use_4bit:
         model = prepare_model_for_kbit_training(model)
 
-    # Extreme Performance Hack: Freeze the bottom N layers
+    # Freeze specified number of bottom layers to accelerate backward pass
     freeze_bottom_layers = cfg.get("freeze_bottom_layers", 0)
     if freeze_bottom_layers > 0:
         if hasattr(model, "model") and hasattr(model.model, "layers"):
@@ -232,7 +232,7 @@ def train(cfg: dict) -> None:
     # Setup resume_from_checkpoint logic
     resume_from_checkpoint = False
 
-    # 1. Check local output dir
+    # 1. Resume from local checkpoint directory if available
     if os.path.exists(training_args.output_dir):
         import glob
 
@@ -248,8 +248,7 @@ def train(cfg: dict) -> None:
             )
             print("[train] Found local 'last-checkpoint'. Resuming from it.")
 
-    # 2. If nothing local, check if the model exists on HF Hub
-    # and we ALSO need the optimizer states which are saved as checkpoints on the Hub.
+    # 2. Optionally fallback to HF Hub checkpoint repository to download optimizer states
     hub_model_id = cfg.get("hub_model_id")
     if not resume_from_checkpoint and hub_model_id:
         from huggingface_hub import HfApi, snapshot_download

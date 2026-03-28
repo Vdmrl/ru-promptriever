@@ -141,10 +141,7 @@ class RetrieverDataset(Dataset):
         # negative_passages exclusively contains hard negatives
         hard_negs = [self._format_passage(n) for n in neg_list]
 
-        # Instruction negatives (new_negatives) are ONLY used for rows WITH instruction.
-        # For has_instruction=false rows, instruct-negatives are query-positive
-        # (they were designed to be relevant to the query but violate the instruction).
-        # Using them as negatives without instruction would corrupt training.
+        # Use new_negatives (instruction negatives) exclusively for instruction-augmented rows.
         has_instruction = row.get("has_instruction", False)
 
         if has_instruction:

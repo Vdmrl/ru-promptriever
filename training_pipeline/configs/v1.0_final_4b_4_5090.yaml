@@ -59,14 +59,13 @@ bf16: true
 load_in_4bit: false
 
 # --- Evaluation ---
-# Set to 10 initially to verify eval works, then increase to ~250 for production
 evaluation_strategy: "steps"
-eval_steps: 10
+eval_steps: 500
 per_device_eval_batch_size: 2
 
 logging_steps: 10
 save_strategy: "steps"
-save_steps: 500
+save_steps: 250
 push_to_hub: true
 gradient_checkpointing: true
 dataloader_num_workers: 4

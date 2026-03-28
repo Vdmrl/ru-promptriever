@@ -401,15 +401,13 @@ class RetrieverTrainer(Trainer):
         """
         Compute contrastive loss.
 
-        During training, uses GradCache to split the batch into sub-batches.
-        During evaluation, performs a direct forward pass without GradCache
-        to avoid .backward() crashes inside torch.no_grad().
+        Uses GradCache during training and a direct forward pass during evaluation.
         """
         queries = inputs["queries"]
         passages = inputs["passages"]
 
         if not model.training:
-            # --- Evaluation: direct forward pass, no GradCache ---
+            # Bypass GradCache for evaluation runs
             wrapper = self._get_encoder_wrapper(model)
             q_reps = wrapper(**queries)
             p_reps = wrapper(**passages)
@@ -420,7 +418,7 @@ class RetrieverTrainer(Trainer):
         # --- Training: use GradCache ---
         gc = self._get_gc(queries, passages)
 
-        # Dynamically ensure gc uses the current (potentially DDP-wrapped) model
+        # Ensure GradCache uses the final, wrapped model instance (e.g. DDP)
         wrapper = self._get_encoder_wrapper(model)
         gc.models = [wrapper, wrapper]
 
@@ -437,7 +435,7 @@ class RetrieverTrainer(Trainer):
         model.train()
         inputs = self._prepare_inputs(inputs)
 
-        # Suppress HF Trainer warning: "Could not estimate the number of tokens..."
+        # Map queries to input_ids to satisfy HF Trainer parameter checks
         if "input_ids" not in inputs and "queries" in inputs:
             inputs["input_ids"] = inputs["queries"]["input_ids"]
 
@@ -447,10 +445,10 @@ class RetrieverTrainer(Trainer):
         if self.args.n_gpu > 1:
             loss = loss.mean()
 
-        # We SKIP self.accelerator.backward(loss) here.
-        # RetrieverGradCache._forward_backward has already called it chunk-by-chunk.
+        # Note: self.accelerator.backward(loss) is bypassed.
+        # RetrieverGradCache._forward_backward accumulates gradients internally.
 
-        # For DeepSpeed, we need to explicitly step the DeepSpeedEngine since we skipped backward
+        # Explicitly step DeepSpeedEngine when backward pass is handled externally
         if self.deepspeed:
             self.deepspeed.step()
 
