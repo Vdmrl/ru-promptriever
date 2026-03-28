@@ -71,8 +71,8 @@ class RetrieverDataset(Dataset):
             and not data_path.startswith("hf://")
             and not os.path.exists(data_path)
         ):
-            print(f"[data] Loading HF dataset '{data_path}' split='{split}'...")
-            return load_dataset(data_path, split=split)
+            print(f"[data] Loading HF dataset '{data_path}' split='{split}' with 8 workers...")
+            return load_dataset(data_path, split=split, num_proc=8)
 
         # 2. Legacy hf:// URI (e.g. "hf://datasets/user/repo/file.parquet")
         if data_path.startswith("hf://datasets/"):
@@ -96,7 +96,7 @@ class RetrieverDataset(Dataset):
 
         # 3. Local file path
         return load_dataset(
-            "parquet", data_files={"train": data_path}, split="train"
+            "parquet", data_files={"train": data_path}, split="train", num_proc=8
         )
 
     def __len__(self) -> int:
