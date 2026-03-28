@@ -5,13 +5,105 @@ import random
 import math
 
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from tqdm import tqdm
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Explicit PyArrow schema — required for HF Dataset Viewer (avoids
+# ArrowNotImplementedError: Nested data conversions not implemented for
+# chunked array outputs)
+# ─────────────────────────────────────────────────────────────────────────────
+_PASSAGE_TYPE = pa.list_(
+    pa.struct([
+        ("docid", pa.string()),
+        ("text",  pa.string()),
+        ("title", pa.string()),
+    ])
+)
+_PASSAGE_WITH_EXP_TYPE = pa.list_(
+    pa.struct([
+        ("docid",       pa.string()),
+        ("text",        pa.string()),
+        ("title",       pa.string()),
+        ("explanation", pa.string()),
+    ])
+)
+_TRAIN_SCHEMA = pa.schema([
+    ("query_id",          pa.string()),
+    ("query",             pa.string()),
+    ("positive_passages", _PASSAGE_TYPE),
+    ("negative_passages", _PASSAGE_WITH_EXP_TYPE),
+    ("only_instruction",  pa.string()),
+    ("only_query",        pa.string()),
+    ("has_instruction",   pa.bool_()),
+    ("new_negatives",     _PASSAGE_WITH_EXP_TYPE),
+    ("is_repeated",       pa.bool_()),
+])
+
+
+def _norm_passage(p, with_exp: bool) -> dict:
+    if p is None:
+        p = {}
+    r = {
+        "docid": str(p.get("docid", p.get("id", "")) or ""),
+        "text":  str(p.get("text", "") or ""),
+        "title": str(p.get("title", "") or ""),
+    }
+    if with_exp:
+        r["explanation"] = str(p.get("explanation", "") or "")
+    return r
+
+
+def _norm_list(lst, with_exp: bool) -> list:
+    if not isinstance(lst, list):
+        return []
+    return [_norm_passage(p, with_exp) for p in lst if p is not None]
+
+
+def _df_to_arrow(df: pd.DataFrame) -> pa.Table:
+    """Convert a DataFrame with nested passage dicts to a typed Arrow table."""
+    arrays = {
+        "query_id": pa.array(
+            [str(v) if v is not None else "" for v in df["query_id"]], type=pa.string()
+        ),
+        "query": pa.array(
+            [str(v) if v is not None else "" for v in df["query"]], type=pa.string()
+        ),
+        "positive_passages": pa.array(
+            [_norm_list(v, with_exp=False) for v in df["positive_passages"]],
+            type=_PASSAGE_TYPE,
+        ),
+        "negative_passages": pa.array(
+            [_norm_list(v, with_exp=True) for v in df["negative_passages"]],
+            type=_PASSAGE_WITH_EXP_TYPE,
+        ),
+        "only_instruction": pa.array(
+            [str(v) if v is not None else "" for v in df["only_instruction"]], type=pa.string()
+        ),
+        "only_query": pa.array(
+            [str(v) if v is not None else "" for v in df["only_query"]], type=pa.string()
+        ),
+        "has_instruction": pa.array(
+            [bool(v) if v is not None else False for v in df["has_instruction"]], type=pa.bool_()
+        ),
+        "new_negatives": pa.array(
+            [_norm_list(v, with_exp=True) for v in df["new_negatives"]],
+            type=_PASSAGE_WITH_EXP_TYPE,
+        ),
+        "is_repeated": pa.array(
+            [bool(v) if v is not None else False for v in df["is_repeated"]], type=pa.bool_()
+        ),
+    }
+    return pa.table(arrays, schema=_TRAIN_SCHEMA)
+
 
 # Add the current directory (data_preprocessing) to sys.path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from utils.io import read_jsonl, get_jsonl_files
-from utils.bm25 import BM25Retriever
+from utils.io import read_jsonl, get_jsonl_files  # noqa: E402
+from utils.bm25 import BM25Retriever  # noqa: E402
 
 
 def normalize_raw_record(record):
@@ -150,7 +242,7 @@ def build_eval_rows(records, doc_pool, rng):
                 "query_id": f"{q_id}-instruct",
                 "query": f"{chosen_q} {instruct}".strip(),
                 "positive_passages": [inst_pos_doc],
-                "negative_passages": valid_synt_negs,
+                "negative_passages": [],  # ONLY hard negatives go here (eval has none)
                 "only_instruction": instruct,
                 "only_query": chosen_q,
                 "has_instruction": True,
@@ -222,7 +314,7 @@ def build_train_rows(records, doc_registry, std_negs_batch, inst_negs_batch, rng
                 "title": sn.get("title", ""),
                 "explanation": "instruction_negative",
             }
-            inst_neg_docs.append(entry)
+            # We NO LONGER add instruction negatives to inst_neg_docs (negative_passages)
             valid_synt_negs.append(entry)
 
         for cand in inst_negs_batch[idx]:
@@ -249,28 +341,41 @@ def build_train_rows(records, doc_registry, std_negs_batch, inst_negs_batch, rng
 
 
 def save_sharded_parquet(df, output_dir, split_name, chunk_size=150000):
-    """Saves DataFrame into multiple parquet shards suitable for Hugging Face datasets."""
+    """Saves DataFrame into multiple parquet shards suitable for Hugging Face datasets.
+
+    Uses an explicit PyArrow schema with typed list<struct> columns so that the
+    HF Dataset Viewer can stream the files without ArrowNotImplementedError.
+    """
     split_dir = os.path.join(output_dir, "data")
     os.makedirs(split_dir, exist_ok=True)
-    
+
     total_rows = len(df)
     if total_rows == 0:
         return []
-        
+
     num_shards = max(1, math.ceil(total_rows / chunk_size))
-    
+
     saved_paths = []
     for i in range(num_shards):
         start_idx = i * chunk_size
         end_idx = min((i + 1) * chunk_size, total_rows)
-        shard_df = df.iloc[start_idx:end_idx]
-        
+        shard_df = df.iloc[start_idx:end_idx].reset_index(drop=True)
+
         shard_name = f"{split_name}-{i:05d}-of-{num_shards:05d}.parquet"
         shard_path = os.path.join(split_dir, shard_name)
-        
-        shard_df.to_parquet(shard_path, engine="pyarrow")
+
+        # Convert to typed Arrow table and write with parquet 2.6 + snappy
+        arrow_table = _df_to_arrow(shard_df)
+        pq.write_table(
+            arrow_table,
+            shard_path,
+            compression="snappy",
+            version="2.6",
+            use_dictionary=False,
+            data_page_version="2.0",
+        )
         saved_paths.append(shard_path)
-        
+
     return saved_paths
 
 
@@ -282,7 +387,7 @@ def write_hf_repo_files(output_dir):
         
     readme_path = os.path.join(output_dir, "README.md")
     with open(readme_path, "w", encoding="utf-8") as f:
-        f.write(f"# Promptriever Dataset\n\n")
+        f.write("# Promptriever Dataset\n\n")
         f.write("This directory contains a generated promptriever dataset, fully compatible with the Hugging Face `datasets` library structure.\n\n")
         
         f.write("## Data Generation Script (`build_dataset.py`)\n\n")

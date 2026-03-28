@@ -72,6 +72,9 @@ python data_preprocessing/extract_missing_triplets.py
 
 # 4. Build the final training/eval dataset (creates parquet files) and optionally upload to Hugging Face
 python data_preprocessing/build_dataset.py --filtered_dir data_preprocessing/data/output_filtered --output_dir data_preprocessing/data/output_final_dataset --push_to_hub "Vladimirlv/ru-promptriever-dataset"
+
+# 5. Output dataset upload (if dataset is already built locally without --push_to_hub)
+huggingface-cli upload Vladimirlv/ru-promptriever-dataset data_preprocessing/data/output_final_dataset --repo-type dataset
 ```
 
 ## Post-Training

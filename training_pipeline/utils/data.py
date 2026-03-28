@@ -94,8 +94,10 @@ class RetrieverDataset(Dataset):
         return len(self.dataset)
 
     @staticmethod
-    def _format_passage(doc: dict) -> str:
-        """Concatenate title and body of a passage document."""
+    def _format_passage(doc) -> str:
+        """Concatenate title and body if dict, or return directly if string."""
+        if isinstance(doc, str):
+            return doc
         title = doc.get("title", "")
         text = doc.get("text", "")
         if title:
@@ -127,14 +129,16 @@ class RetrieverDataset(Dataset):
         if neg_list is None:
             neg_list = []
 
-        # Split negatives by type: instruction_negative vs hard/BM25
-        instruct_negs = []
-        hard_negs = []
-        for n in neg_list:
-            if n.get("explanation") == "instruction_negative":
-                instruct_negs.append(self._format_passage(n))
-            else:
-                hard_negs.append(self._format_passage(n))
+        # Split negatives by type: instruction vs hard/BM25
+        # In the original Promptriever schema, instruction negatives are exclusively in 'new_negatives'.
+        instruct_negs_raw = row.get("new_negatives", [])
+        if instruct_negs_raw is None:
+            instruct_negs_raw = []
+            
+        instruct_negs = [self._format_passage(n) for n in instruct_negs_raw]
+        
+        # negative_passages exclusively contains hard negatives
+        hard_negs = [self._format_passage(n) for n in neg_list]
 
         # Sample the requested number of each type
         n_inst = min(self.num_instruct_negatives, len(instruct_negs))
