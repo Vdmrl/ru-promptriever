@@ -427,6 +427,21 @@ class RetrieverTrainer(Trainer):
 
         return (loss, None) if return_outputs else loss
 
+    def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
+        """
+        Override prediction_step to route evaluation through compute_loss
+        instead of calling model(**inputs) directly, which fails because
+        our inputs use a custom {queries, passages} format without top-level input_ids.
+        """
+        model.eval()
+        inputs = self._prepare_inputs(inputs)
+
+        with torch.no_grad():
+            with self.compute_loss_context_manager():
+                loss = self.compute_loss(model, inputs)
+
+        return (loss.detach(), None, None)
+
     def training_step(self, model, inputs, num_items_in_batch=None):
         """
         Override training_step to bypass HF Trainer's native backward() call,
