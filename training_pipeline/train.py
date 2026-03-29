@@ -150,39 +150,7 @@ def train(cfg: dict) -> None:
     # 3. Model
     model = build_model(cfg)
 
-    # 4. Data
-    train_dataset = RetrieverDataset(
-        data_path=cfg["train_data_path"],
-        split=cfg.get("train_split", "train"),
-        num_negatives=cfg.get("num_negatives", 7),
-        num_instruct_negatives=cfg.get("num_instruct_negatives", 3),
-        instruct_only=cfg.get("instruct_only", False),
-        use_repeated=cfg.get("use_repeated", False),
-    )
-
-    eval_dataset = None
-    eval_path = cfg.get("eval_data_path")
-    if eval_path:
-        eval_dataset = RetrieverDataset(
-            data_path=eval_path,
-            split=cfg.get("eval_split", "validation"),
-            num_negatives=cfg.get("num_negatives", 7),
-            num_instruct_negatives=cfg.get("num_instruct_negatives", 3),
-            instruct_only=cfg.get("instruct_only", False),
-            use_repeated=cfg.get("use_repeated", False),
-        )
-        print(f"[data] Loaded {len(eval_dataset)} validation examples")
-
-    collator = RetrieverCollator(
-        tokenizer=tokenizer,
-        max_len_query=cfg.get("max_len_query", 304),
-        max_len_passage=cfg.get("max_len_passage", 256),
-    )
-
-    print(f"[data] Loaded {len(train_dataset)} training examples")
-    print(f"[data] Negatives per query: {cfg.get('num_negatives', 7)}")
-
-    # 5. Training arguments
+    # 4. Training arguments (early init for DDP main_process_first)
     training_args = TrainingArguments(
         output_dir=cfg.get("output_dir", "./output_model"),
         per_device_train_batch_size=cfg.get("per_device_train_batch_size", 1),
@@ -204,17 +172,52 @@ def train(cfg: dict) -> None:
         save_total_limit=cfg.get("save_total_limit", None),
         push_to_hub=cfg.get("push_to_hub", False),
         hub_model_id=cfg.get("hub_model_id", None),
-        hub_token=os.environ.get("HF_TOKEN", None),  # HF_TOKEN env var is standard
-        hub_strategy="checkpoint",  # Push latest checkpoint for easy resuming
+        hub_token=os.environ.get("HF_TOKEN", None),
+        hub_strategy="checkpoint",
         gradient_checkpointing=cfg.get("gradient_checkpointing", True),
         gradient_checkpointing_kwargs={"use_reentrant": False},
         ddp_find_unused_parameters=False,
         dataloader_num_workers=cfg.get("dataloader_num_workers", 2),
         deepspeed=cfg.get("deepspeed"),
-        remove_unused_columns=False,  # Required for custom collator
+        remove_unused_columns=False,
         report_to=cfg.get("report_to", "none"),
         run_name=cfg.get("run_name", cfg.get("wandb_project", "ru-promptriever")),
     )
+
+    # 5. Data
+    with training_args.main_process_first(desc="dataset prep"):
+        train_dataset = RetrieverDataset(
+            data_path=cfg["train_data_path"],
+            split=cfg.get("train_split", "train"),
+            num_negatives=cfg.get("num_negatives", 7),
+            num_instruct_negatives=cfg.get("num_instruct_negatives", 3),
+            instruct_only=cfg.get("instruct_only", False),
+            use_repeated=cfg.get("use_repeated", False),
+        )
+
+        eval_dataset = None
+        eval_path = cfg.get("eval_data_path")
+        if eval_path:
+            eval_dataset = RetrieverDataset(
+                data_path=eval_path,
+                split=cfg.get("eval_split", "validation"),
+                num_negatives=cfg.get("num_negatives", 7),
+                num_instruct_negatives=cfg.get("num_instruct_negatives", 3),
+                instruct_only=cfg.get("instruct_only", False),
+                use_repeated=cfg.get("use_repeated", False),
+            )
+            print(f"[data] Loaded {len(eval_dataset)} validation examples")
+
+    collator = RetrieverCollator(
+        tokenizer=tokenizer,
+        max_len_query=cfg.get("max_len_query", 304),
+        max_len_passage=cfg.get("max_len_passage", 256),
+    )
+
+    print(f"[data] Loaded {len(train_dataset)} training examples")
+    print(f"[data] Negatives per query: {cfg.get('num_negatives', 7)}")
+
+    # 6. Trainer Setup
 
     # 6. Trainer
     trainer = RetrieverTrainer(
