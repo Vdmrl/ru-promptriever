@@ -4,8 +4,8 @@
 # IMPORTANT — Install PyTorch FIRST (before this file), because the
 # correct wheel depends on your CUDA version:
 #
-#   CUDA 12.4 (RTX 5090 / Vast.ai baseline):
-#     pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+#   CUDA 12.8 (RTX 5090 / Vast.ai baseline for Blackwell GPUs):
+#     pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 #
 #   CUDA 11.8 (older V100 nodes on Yandex Cloud):
 #     pip install torch==2.2.2 --index-url https://download.pytorch.org/whl/cu118
