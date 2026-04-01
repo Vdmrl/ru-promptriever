@@ -84,13 +84,10 @@ datasets:
     type: "rumteb"
     # Built-in MTEB task names for Russian retrieval
     task_names:
-      # - "RiaNewsRetrieval"           # DISABLED: 704k docs, niche news domain
       - "RuBQRetrieval"
-      # - "MIRACLRetrieval"            # DISABLED: 9.5M docs, ~50 hours per LLM inference
     metrics:
       - "ndcg_at_10"
 
-  # --- English Sanity Check ---
   # Small BEIR datasets to verify metrics match published Promptriever paper scores.
   # SciFact: 5k docs, 300 queries. NFCorpus: 3.6k docs, 323 queries.
   # Total runtime: ~5-10 min for all models.

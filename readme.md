@@ -132,6 +132,12 @@ python3 evaluate.py --config configs/baseline_qwen3-4b.yaml --hf-repo "Vladimirl
 
 # 3. Skip existing results if resuming an interrupted run:
 python3 evaluate.py --config configs/baseline_qwen3-4b.yaml --skip-existing
+
+# 4. Evaluate a specific model on specific datasets (e.g. testing follow-up metrics on ru-promptriever):
+HF_HUB_HTTP_TIMEOUT=300 python3 evaluate.py \
+  --config configs/baseline_qwen3-4b.yaml \
+  --models ru-promptriever-qwen3-4b \
+  --datasets mfollowir_ru synthetic_test
 ```
 
 ### Uploading Results to Hugging Face
