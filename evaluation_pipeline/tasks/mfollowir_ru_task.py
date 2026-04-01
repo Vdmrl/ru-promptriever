@@ -137,36 +137,11 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
                 relevant_docs[q_id][c_id] = score
                 required_doc_ids.add(c_id)
 
-        # --- Load NeuCLIR corpus and limit to 20k docs ---
-        full_corpus = self._load_neuclir_corpus()
-
-        # We need to drop corpus size down from 4.6M to 20k to STRICTLY fit in 6h compute budget
-        # We MUST include all docs from qrels as well as random noise.
-        corpus = {}
-        MAX_DOCS = 20000
-
-        # 1. Add all required docs first
-        for doc_id in required_doc_ids:
-            if doc_id in full_corpus:
-                corpus[doc_id] = full_corpus[doc_id]
-            else:
-                logger.warning(f"Required doc {doc_id} not found in corpus!")
-
-        # 2. Fill the rest up to MAX_DOCS with random docs
-        import random
-
-        remaining_slots = MAX_DOCS - len(corpus)
-        if remaining_slots > 0:
-            available_docs = sorted(list(full_corpus.keys() - corpus.keys()))
-            random.seed(42)
-            sampled_docs = random.sample(
-                available_docs, min(remaining_slots, len(available_docs))
-            )
-            for doc_id in sampled_docs:
-                corpus[doc_id] = full_corpus[doc_id]
+        # --- Load official pooled mFollowIR corpus ---
+        corpus = self._load_pooled_corpus()
 
         logger.info(
-            f"Loaded mFollowIR-RU: {len(corpus)} docs (TRUNCATED from {len(full_corpus)} for speed), "
+            f"Loaded mFollowIR-RU: {len(corpus)} pooled docs (hard negatives), "
             f"{len(queries)} queries ({len(self._query_pairs)} pairs for p-MRR), "
             f"{sum(len(v) for v in relevant_docs.values())} judgments"
         )
@@ -217,94 +192,30 @@ class MFollowIRRuRetrieval(AbsTaskRetrieval):
         )
         logger.info(f"Downloaded to {self.data_dir}")
 
-    def _load_neuclir_corpus(self) -> Dict[str, dict]:
-        """Load NeuCLIR-2022 Russian corpus.
-
-        Tries ir_datasets first, falls back to a local JSONL file.
+    def _load_pooled_corpus(self) -> Dict[str, dict]:
+        """Load official pooled corpus directly via HuggingFace Hub.
+        
+        This avoids the need for massive truncation and correctly uses hard negatives.
         """
-        corpus_path = os.path.join(self.data_dir, "neuclir_ru_corpus.jsonl")
+        from huggingface_hub import hf_hub_download
 
-        if os.path.exists(corpus_path):
-            return self._load_corpus_from_jsonl(corpus_path)
+        corpus_path = os.path.join(self.data_dir, "corpus.jsonl")
 
-        # Download directly via HuggingFace Hub to bypass broken dataset scripts and outdated md5s
-        try:
-            from huggingface_hub import hf_hub_download
-            import gzip
-
-            logger.info(
-                "Downloading NeuCLIR-2022 jsonl directly via hf_hub_download..."
-            )
-            corpus_file = hf_hub_download(
-                repo_id="neuclir/neuclir1",
-                filename="data/rus-00000-of-00001.jsonl.gz",
+        if not os.path.exists(corpus_path):
+            logger.info("Downloading official pooled mFollowIR corpus (hard negatives)...")
+            hf_hub_download(
+                repo_id="jhu-clsp/mFollowIR-rus-cl",
+                filename="corpus.jsonl",
                 repo_type="dataset",
+                local_dir=self.data_dir,
             )
 
-            corpus = {}
-            with gzip.open(corpus_file, "rt", encoding="utf-8") as f:
-                for line in f:
-                    doc = json.loads(line)
-                    doc_id = str(doc.get("doc_id", doc.get("id", "")))
-                    corpus[doc_id] = {
-                        "text": doc.get("text", doc.get("segment", "")),
-                        "title": doc.get("title", ""),
-                    }
-
-            logger.info(f"NeuCLIR corpus loaded: {len(corpus)} documents")
-
-            # Cache to disk
-            logger.info(f"Caching corpus to {corpus_path}")
-            os.makedirs(os.path.dirname(corpus_path), exist_ok=True)
-            with open(corpus_path, "w", encoding="utf-8") as f:
-                for doc_id, doc_data in corpus.items():
-                    f.write(
-                        json.dumps({"doc_id": doc_id, **doc_data}, ensure_ascii=False)
-                        + "\n"
-                    )
-
-            return corpus
-
-        except Exception as e:
-            logger.warning(f"Direct HF download failed ({e}), trying ir_datasets...")
-
-        # Fallback: ir_datasets (may have MD5 issues with outdated version)
-        try:
-            import ir_datasets
-
-            logger.info("Loading NeuCLIR-2022 Russian corpus via ir_datasets...")
-            ds = ir_datasets.load("neuclir/1/ru")
-            corpus = {}
-            for doc in ds.docs_iter():
-                corpus[doc.doc_id] = {
-                    "text": doc.text,
-                    "title": doc.title if hasattr(doc, "title") else "",
-                }
-
-            os.makedirs(os.path.dirname(corpus_path), exist_ok=True)
-            with open(corpus_path, "w", encoding="utf-8") as f:
-                for doc_id, doc_data in corpus.items():
-                    f.write(
-                        json.dumps({"doc_id": doc_id, **doc_data}, ensure_ascii=False)
-                        + "\n"
-                    )
-            return corpus
-
-        except Exception as e:
-            logger.error(
-                f"Failed to load NeuCLIR corpus: {e}. "
-                f"Place neuclir_ru_corpus.jsonl in {self.data_dir}"
-            )
-            raise
-
-    def _load_corpus_from_jsonl(self, path: str) -> Dict[str, dict]:
-        """Load corpus from a cached JSONL file."""
-        logger.info(f"Loading cached NeuCLIR corpus from {path}")
+        logger.info(f"Loading cached pooled corpus from {corpus_path}")
         corpus = {}
-        with open(path, "r", encoding="utf-8") as f:
+        with open(corpus_path, "r", encoding="utf-8") as f:
             for line in f:
                 doc = json.loads(line.strip())
-                doc_id = str(doc["doc_id"])
+                doc_id = str(doc.get("_id", doc.get("doc_id", "")))
                 corpus[doc_id] = {
                     "text": doc.get("text", ""),
                     "title": doc.get("title", ""),
