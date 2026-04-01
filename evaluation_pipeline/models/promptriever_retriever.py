@@ -18,7 +18,7 @@ import torch
 import torch.nn.functional as F
 from mteb import EncoderProtocol
 from tqdm import trange
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
 
 from .base import BaseRetriever
 
@@ -85,7 +85,7 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
             base_model_name = peft_config.base_model_name_or_path
             logger.info(f"Base model: {base_model_name}")
 
-            base_model = AutoModelForCausalLM.from_pretrained(
+            base_model = AutoModel.from_pretrained(
                 base_model_name,
                 torch_dtype=torch_dtype,
                 device_map="auto",
