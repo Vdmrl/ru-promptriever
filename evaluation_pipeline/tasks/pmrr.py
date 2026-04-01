@@ -71,26 +71,15 @@ def compute_pmrr(
             std_rank = std_ranking.get(doc_id)
             inst_rank = inst_ranking.get(doc_id)
 
-            if std_rank is None and inst_rank is None:
-                continue
+            # MTEB replaces None with len(dict) + 1
+            std_rank_val = std_rank if std_rank is not None else len(std_ranking) + 1
+            inst_rank_val = inst_rank if inst_rank is not None else len(inst_ranking) + 1
 
-            # If document is not in results, treat as max rank
-            max_rank = max(len(std_ranking), len(inst_ranking)) + 1
-            std_rank = std_rank if std_rank is not None else max_rank
-            inst_rank = inst_rank if inst_rank is not None else max_rank
-
-            std_rr = 1.0 / std_rank
-            inst_rr = 1.0 / inst_rank
-
-            # FollowIR Paper Equation 1:
-            if std_rank > inst_rank:
-                # Rank worsened (moved up to top, e.g. 10 -> 1) -> Negative reward
-                # Ratio: (MRRog / MRRnew) - 1 => (std_rr / inst_rr) - 1.0
-                score = (std_rr / inst_rr) - 1.0
+            # MTEB rank_score logic:
+            if std_rank_val >= inst_rank_val:
+                score = ((1.0 / std_rank_val) / (1.0 / inst_rank_val)) - 1.0
             else:
-                # Rank improved (moved down, e.g. 1 -> 10) -> Positive reward
-                # Ratio: 1 - (MRRnew / MRRog) => 1.0 - (inst_rr / std_rr)
-                score = 1.0 - (inst_rr / std_rr)
+                score = 1.0 - ((1.0 / inst_rank_val) / (1.0 / std_rank_val))
 
             query_scores.append(score)
 
@@ -100,8 +89,11 @@ def compute_pmrr(
     if not query_pmrr_scores:
         return 0.0
 
-    # Macro-average across all queries, scale to [-100, +100]
-    return float(np.mean(query_pmrr_scores) * 100)
+    # Macro-average across all queries
+    # NOTE: MTEB returns raw values (range -1 to +1). Paper tables display
+    # these multiplied by 100 at print time (e.g. 0.095 → "9.5" in table).
+    # We return raw values to stay consistent with MTEB.
+    return float(np.mean(query_pmrr_scores))
 
 
 def _rank_documents(doc_scores: Dict[str, float]) -> Dict[str, int]:
