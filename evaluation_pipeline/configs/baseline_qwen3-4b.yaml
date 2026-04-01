@@ -38,7 +38,7 @@ models:
   - name: "promptriever-mistral-7b"
     type: "causal_lm"
     model_name_or_path: "samaya-ai/promptriever-mistral-v0.1-7b-v1"
-    batch_size: 32
+    batch_size: 16
     max_length: 512
     # Promptriever uses double-space after prefix (as documented on HF model page)
     query_prefix: "query:  "
@@ -53,7 +53,7 @@ models:
   - name: "ru-promptriever-qwen3-4b"
     type: "causal_lm"
     model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b"
-    batch_size: 32
+    batch_size: 16
     max_length: 512
 
   - name: "giga-embeddings-instruct"
