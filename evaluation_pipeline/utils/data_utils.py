@@ -208,3 +208,48 @@ def print_summary_table(output_dir: str) -> None:
     print("=" * 80)
     print(table)
     print("=" * 80 + "\n")
+
+
+def print_intermediate_result(
+    model_name: str,
+    dataset_name: str,
+    all_metrics: Dict[str, Any],
+) -> None:
+    """Print a compact result table immediately after one model-dataset pair completes."""
+    # Build a flat {metric: value} dict the same way format_results_table does
+    flat = _flatten_metrics(all_metrics)
+
+    # Pretty-print key metrics first, then the rest
+    KEY_METRICS = [
+        "p_mrr",
+        "ndcg_cut_10", "ndcg_cut_20", "ndcg_cut_100",
+        "map_cut_10", "map_cut_20", "map_cut_100",
+        "recall_10", "recall_20", "recall_100",
+    ]
+
+    rows = []
+    seen = set()
+    # Key metrics first (in fixed order)
+    for key in KEY_METRICS:
+        if key in flat:
+            # p_mrr is stored raw (-1 to +1); display as paper does (× 100)
+            if key == "p_mrr":
+                rows.append([key, f"{flat[key] * 100:.2f}"])
+            else:
+                rows.append([key, f"{flat[key]:.4f}"])
+            seen.add(key)
+    # Remaining metrics alphabetically
+    for key in sorted(flat):
+        if key not in seen:
+            rows.append([key, f"{flat[key]:.4f}"])
+
+    header = f"  {model_name}  |  {dataset_name}  "
+    separator = "-" * max(len(header), 50)
+    print(f"\n{separator}")
+    print(f"  ✓ Results: {model_name}  →  {dataset_name}")
+    print(separator)
+    if rows:
+        print(tabulate(rows, headers=["Metric", "Score"], tablefmt="simple"))
+    else:
+        print("  (no numeric metrics found)")
+    print(separator + "\n")

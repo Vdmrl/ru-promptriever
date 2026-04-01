@@ -36,7 +36,7 @@ from models.qwen3_embedding_retriever import Qwen3EmbeddingRetriever
 from tasks.mfollowir_ru_task import MFollowIRRuRetrieval
 from tasks.pmrr import compute_pmrr
 from tasks.synthetic_test_task import RuPrompTrieverTestRetrieval
-from utils.data_utils import load_config, print_summary_table, save_results
+from utils.data_utils import load_config, print_summary_table, print_intermediate_result, save_results
 
 logging.basicConfig(
     level=logging.INFO,
@@ -771,7 +771,7 @@ def main():
                                 bm25_results = model.retrieve(queries, top_k=100)
                                 pmrr = evaluate_pmrr_synthetic(task, bm25_results)
                                 all_metrics["p_mrr"] = pmrr
-                                logger.info(f"p-MRR: {pmrr:.2f}")
+                                logger.info(f"p-MRR: {pmrr * 100:.2f} (raw: {pmrr:.4f})")
                         else:
                             retrieval_results, metrics = evaluate_dense_custom(
                                 model,
@@ -791,9 +791,10 @@ def main():
                             ):
                                 pmrr = evaluate_pmrr_synthetic(task, retrieval_results)
                                 all_metrics["p_mrr"] = pmrr
-                                logger.info(f"p-MRR: {pmrr:.2f}")
+                                logger.info(f"p-MRR: {pmrr * 100:.2f} (raw: {pmrr:.4f})")
 
                 save_results(all_metrics, model_name, dataset_name, output_dir)
+                print_intermediate_result(model_name, dataset_name, all_metrics)
                 logger.info(f"✓ {model_name} on {dataset_name} completed.")
 
                 # Upload intermediate results
