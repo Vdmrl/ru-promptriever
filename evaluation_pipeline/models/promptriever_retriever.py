@@ -169,25 +169,39 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
                 base_model_name, trust_remote_code=True
             )
 
-            # Monkey-patch PeftConfig.from_pretrained to intercept internal calls
-            # made by PeftModel.load_adapter, ensuring target_modules is always a list
-            orig_from_pretrained = PeftConfig.from_pretrained
+            # Resolve accelerate/PEFT compatibility issue where no_split_module_classes
+            # contains a set object, causing unhashable type exceptions.
+            import accelerate.utils.modeling
+            import peft.peft_model
 
-            @classmethod
-            def patched_from_pretrained(cls, *args, **kwargs):
-                cfg = orig_from_pretrained(*args, **kwargs)
-                if hasattr(cfg, "target_modules") and isinstance(cfg.target_modules, set):
-                    cfg.target_modules = list(cfg.target_modules)
-                return cfg
+            orig_accel_get_balanced_memory = accelerate.utils.modeling.get_balanced_memory
+            orig_peft_get_balanced_memory = getattr(peft.peft_model, "get_balanced_memory", None)
 
-            PeftConfig.from_pretrained = patched_from_pretrained
+            def patched_get_balanced_memory(*args, **kwargs):
+                if "no_split_module_classes" in kwargs:
+                    classes = kwargs["no_split_module_classes"]
+                    if classes is not None:
+                        clean_classes = []
+                        for c in classes:
+                            if isinstance(c, (set, list, tuple)):
+                                clean_classes.extend(c)
+                            elif isinstance(c, str):
+                                clean_classes.append(c)
+                        kwargs["no_split_module_classes"] = clean_classes
+                return orig_accel_get_balanced_memory(*args, **kwargs)
+
+            accelerate.utils.modeling.get_balanced_memory = patched_get_balanced_memory
+            if orig_peft_get_balanced_memory:
+                peft.peft_model.get_balanced_memory = patched_get_balanced_memory
 
             try:
                 self.model = PeftModel.from_pretrained(
                     base_model, model_name_or_path, config=peft_config
                 )
             finally:
-                PeftConfig.from_pretrained = orig_from_pretrained
+                accelerate.utils.modeling.get_balanced_memory = orig_accel_get_balanced_memory
+                if orig_peft_get_balanced_memory:
+                    peft.peft_model.get_balanced_memory = orig_peft_get_balanced_memory
 
             self.model = self.model.merge_and_unload()
             self.model.eval()
