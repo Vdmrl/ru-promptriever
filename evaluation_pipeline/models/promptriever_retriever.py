@@ -174,9 +174,35 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
             self.tokenizer = AutoTokenizer.from_pretrained(
                 base_model_name, trust_remote_code=True
             )
-            self.model = PeftModel.from_pretrained(
-                base_model, model_name_or_path, config=peft_config
-            )
+
+            # Monkey-patch accelerate's get_balanced_memory to fix PEFT bug 
+            # where no_split_module_classes gets polluted with unhashable sets.
+            import accelerate.utils.modeling
+
+            orig_get_balanced_memory = accelerate.utils.modeling.get_balanced_memory
+
+            def patched_get_balanced_memory(*args, **kwargs):
+                if "no_split_module_classes" in kwargs:
+                    classes = kwargs["no_split_module_classes"]
+                    if classes is not None:
+                        clean_classes = []
+                        for c in classes:
+                            if isinstance(c, (set, list, tuple)):
+                                clean_classes.extend(c)
+                            elif isinstance(c, str):
+                                clean_classes.append(c)
+                        kwargs["no_split_module_classes"] = clean_classes
+                return orig_get_balanced_memory(*args, **kwargs)
+
+            accelerate.utils.modeling.get_balanced_memory = patched_get_balanced_memory
+
+            try:
+                self.model = PeftModel.from_pretrained(
+                    base_model, model_name_or_path, config=peft_config
+                )
+            finally:
+                accelerate.utils.modeling.get_balanced_memory = orig_get_balanced_memory
+
             self.model = self.model.merge_and_unload()
             self.model.eval()
         else:
