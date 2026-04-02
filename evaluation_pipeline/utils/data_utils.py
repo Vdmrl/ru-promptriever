@@ -126,7 +126,11 @@ def format_results_table(results: List[Dict[str, Any]]) -> str:
                 else:
                     normalized_name = metric_name
 
-                rows.append([model, dataset, normalized_name, f"{value:.4f}"])
+                # p_mrr is stored raw (-1 to +1); display as paper does (× 100)
+                if normalized_name == "p_mrr":
+                    rows.append([model, dataset, normalized_name, f"{value * 100:.2f}"])
+                else:
+                    rows.append([model, dataset, normalized_name, f"{value:.4f}"])
         else:
             rows.append([model, dataset, "raw", str(metrics)])
 
