@@ -6,6 +6,8 @@
 device: "cuda:0"
 dtype: "bfloat16"
 output_dir: "./results"
+# Top-K documents retrieved per query (must be >= max eval cutoff, e.g. 1000 for p-MRR).
+retrieval_top_k: 1000
 
 # Generic instruction for OOD benchmarks (ruMTEB) where no instructions exist.
 # Appended to query for Promptriever-type models to avoid out-of-distribution.

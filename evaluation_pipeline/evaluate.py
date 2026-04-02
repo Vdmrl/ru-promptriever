@@ -366,7 +366,7 @@ def _trim_corpus_for_smoke_test(corpus, relevant_docs, max_noise=500):
 def evaluate_bm25(
     model: BM25Retriever,
     task,
-    top_k: int = 100,
+    top_k: int = 1000,
     max_queries: int = None,
 ) -> Dict:
     """Run BM25 retrieval and compute metrics."""
@@ -410,7 +410,7 @@ def evaluate_dense_custom(
     dataset_type: str,
     generic_instruction: str,
     batch_size: int = 32,
-    top_k: int = 100,
+    top_k: int = 1000,
     max_queries: int = None,
 ) -> Dict:
     """Evaluate a dense model on a custom task (synthetic_test, mfollowir).
@@ -602,7 +602,7 @@ def _dense_retrieve(
     queries: Dict[str, str],
     corpus: Dict[str, dict],
     batch_size: int = 32,
-    top_k: int = 100,
+    top_k: int = 1000,
 ) -> Dict[str, Dict[str, float]]:
     """Retrieve using dense model: encode queries and corpus, compute cosine."""
     query_ids = list(queries.keys())
@@ -688,6 +688,7 @@ def main():
     generic_instruction = config.get(
         "generic_instruction", "Найди релевантный документ."
     )
+    retrieval_top_k = config.get("retrieval_top_k", 1000)
 
     # Filter models
     models_cfg = config.get("models", [])
@@ -751,7 +752,7 @@ def main():
                     if model_type == "bm25":
                         for task in tasks:
                             task_metrics = evaluate_bm25(
-                                model, task, max_queries=args.max_queries
+                                model, task, top_k=retrieval_top_k, max_queries=args.max_queries
                             )
                             t_name = (
                                 task.metadata.name
@@ -779,7 +780,7 @@ def main():
                     for task in tasks:
                         if model_type == "bm25":
                             bm25_metrics = evaluate_bm25(
-                                model, task, max_queries=args.max_queries
+                                model, task, top_k=retrieval_top_k, max_queries=args.max_queries
                             )
                             all_metrics["retrieval"] = bm25_metrics
 
@@ -790,7 +791,7 @@ def main():
                             ):
                                 task.load_data()
                                 queries = task.queries["test"]
-                                bm25_results = model.retrieve(queries, top_k=100)
+                                bm25_results = model.retrieve(queries, top_k=retrieval_top_k)
                                 pmrr = evaluate_pmrr_synthetic(task, bm25_results)
                                 all_metrics["p_mrr"] = pmrr
                                 logger.info(f"p-MRR: {pmrr * 100:.2f} (raw: {pmrr:.4f})")
@@ -802,6 +803,7 @@ def main():
                                 dataset_type,
                                 generic_instruction,
                                 batch_size,
+                                top_k=retrieval_top_k,
                                 max_queries=args.max_queries,
                             )
                             all_metrics["retrieval"] = metrics
