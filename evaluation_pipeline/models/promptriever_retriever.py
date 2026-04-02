@@ -154,6 +154,13 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
             from peft import PeftConfig, PeftModel
 
             peft_config = PeftConfig.from_pretrained(model_name_or_path)
+            
+            # Temporary fix for PEFT/accelerate bug evaluating target_modules as set
+            if hasattr(peft_config, "target_modules") and isinstance(
+                peft_config.target_modules, set
+            ):
+                peft_config.target_modules = list(peft_config.target_modules)
+
             base_model_name = peft_config.base_model_name_or_path
             logger.info(f"Base model: {base_model_name}")
 
@@ -167,7 +174,9 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
             self.tokenizer = AutoTokenizer.from_pretrained(
                 base_model_name, trust_remote_code=True
             )
-            self.model = PeftModel.from_pretrained(base_model, model_name_or_path)
+            self.model = PeftModel.from_pretrained(
+                base_model, model_name_or_path, config=peft_config
+            )
             self.model = self.model.merge_and_unload()
             self.model.eval()
         else:
