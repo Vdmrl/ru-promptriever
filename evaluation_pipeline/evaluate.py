@@ -692,7 +692,7 @@ def main():
         try:
             model = load_model(model_cfg, config)
         except Exception as e:
-            logger.error(f"✗ Failed to load model {model_name}: {e}")
+            logger.error(f"✗ Failed to load model {model_name}: {e}", exc_info=True)
             continue
 
         for dataset_cfg in datasets_cfg:
