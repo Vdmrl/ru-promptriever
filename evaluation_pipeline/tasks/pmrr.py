@@ -2,101 +2,110 @@
 p-MRR (Pairwise Mean Reciprocal Rank) metric implementation.
 
 p-MRR measures how well a retrieval model follows instructions by comparing
-the ranking of documents between standard queries and instructed queries.
+the ranking of "changed" documents between original-instruction and
+changed-instruction queries.
 
 A positive p-MRR means the model correctly adjusts rankings based on
-instructions. Range: [-100, +100].
+instructions. Range: [-100, +100] (when multiplied by 100).
 
-Reference: Weller et al., 2024 — FollowIR / Promptriever papers.
+This implementation mirrors the official MTEB `calculate_pmrr`:
+  mteb._evaluators.retrieval_metrics.calculate_pmrr
+
+Reference: Weller et al., 2024 — FollowIR / mFollowIR papers.
 """
 
 from typing import Dict, List, Tuple
 
-import numpy as np
+import pandas as pd
 
 
 def compute_pmrr(
-    results_standard: Dict[str, Dict[str, float]],
-    results_instructed: Dict[str, Dict[str, float]],
-    query_pairs: List[Tuple[str, str]],
-    relevant_docs_standard: Dict[str, Dict[str, int]],
-    relevant_docs_instructed: Dict[str, Dict[str, int]],
+    results_original: Dict[str, Dict[str, float]],
+    results_changed: Dict[str, Dict[str, float]],
+    qrel_diff: Dict[str, List[str]],
 ) -> float:
-    """Compute p-MRR between standard and instructed query pairs.
+    """Compute p-MRR between original-instruction and changed-instruction runs.
 
-    For each (standard_query, instructed_query) pair, we look at documents
-    that are relevant to the standard query but NOT relevant to the
-    instructed query (instruction negatives). p-MRR measures whether these
-    documents decrease in rank when the instruction is added.
+    Mirrors the official MTEB ``calculate_pmrr`` exactly.
+
+    For each query in *qrel_diff*, we look at documents whose relevance
+    **changed** between the original and changed instructions.  p-MRR
+    measures whether these documents moved in rank as expected.
 
     Args:
-        results_standard: {std_query_id: {doc_id: score}} — retrieval scores
-            for standard queries (without instructions).
-        results_instructed: {inst_query_id: {doc_id: score}} — retrieval
-            scores for instructed queries.
-        query_pairs: List of (std_query_id, inst_query_id) pairs.
-        relevant_docs_standard: {std_query_id: {doc_id: relevance_score}}
-        relevant_docs_instructed: {inst_query_id: {doc_id: relevance_score}}
+        results_original: ``{qid-og: {doc_id: score}}`` — retrieval scores
+            for queries with the **original** instruction.
+        results_changed: ``{qid-changed: {doc_id: score}}`` — retrieval
+            scores for queries with the **changed** instruction.
+        qrel_diff: ``{qid: [doc_id, ...]}`` — mapping from bare query ID
+            to the list of documents whose relevance changed.
 
     Returns:
-        p-MRR score in [-100, +100].
+        p-MRR score (raw, in [-1, +1]).  Multiply by 100 for display.
     """
-    query_pmrr_scores = []
+    changes = []
 
-    for std_qid, inst_qid in query_pairs:
-        std_results = results_standard.get(std_qid, {})
-        inst_results = results_instructed.get(inst_qid, {})
+    for qid, changed_docs in qrel_diff.items():
+        og_key = f"{qid}-og"
+        changed_key = f"{qid}-changed"
 
-        std_relevant = {
-            k for k, v in relevant_docs_standard.get(std_qid, {}).items() if v > 0
-        }
-        inst_relevant = {
-            k for k, v in relevant_docs_instructed.get(inst_qid, {}).items() if v > 0
-        }
-
-        # Documents that should decrease in rank after adding instruction:
-        # relevant to standard query, but NOT relevant to instructed query
-        should_decrease = std_relevant - inst_relevant
-
-        if not should_decrease:
+        if og_key not in results_original or changed_key not in results_changed:
             continue
 
-        # Rank documents by score (descending)
-        std_ranking = _rank_documents(std_results)
-        inst_ranking = _rank_documents(inst_results)
+        og_run = results_original[og_key]
+        new_run = results_changed[changed_key]
 
-        query_scores = []
+        for doc_id in changed_docs:
+            og_rank, og_score = _get_rank_from_dict(og_run, doc_id)
+            new_rank, new_score = _get_rank_from_dict(new_run, doc_id)
 
-        for doc_id in should_decrease:
-            std_rank = std_ranking.get(doc_id)
-            inst_rank = inst_ranking.get(doc_id)
+            changes.append(
+                {
+                    "qid": qid,
+                    "doc_id": doc_id,
+                    "og_rank": og_rank,
+                    "new_rank": new_rank,
+                    "og_score": og_score,
+                    "new_score": new_score,
+                }
+            )
 
-            # MTEB replaces None with len(dict) + 1
-            std_rank_val = std_rank if std_rank is not None else len(std_ranking) + 1
-            inst_rank_val = inst_rank if inst_rank is not None else len(inst_ranking) + 1
-
-            # MTEB rank_score logic:
-            if std_rank_val >= inst_rank_val:
-                score = ((1.0 / std_rank_val) / (1.0 / inst_rank_val)) - 1.0
-            else:
-                score = 1.0 - ((1.0 / inst_rank_val) / (1.0 / std_rank_val))
-
-            query_scores.append(score)
-
-        if query_scores:
-            query_pmrr_scores.append(float(np.mean(query_scores)))
-
-    if not query_pmrr_scores:
+    if not changes:
         return 0.0
 
-    # Macro-average across all queries
-    # NOTE: MTEB returns raw values (range -1 to +1). Paper tables display
-    # these multiplied by 100 at print time (e.g. 0.095 → "9.5" in table).
-    # We return raw values to stay consistent with MTEB.
-    return float(np.mean(query_pmrr_scores))
+    # Compute rank_score for each changed document
+    df = pd.DataFrame(changes)
+    df["p-MRR"] = df.apply(_rank_score, axis=1)
+
+    # Average per query, then macro-average across queries
+    qid_wise = df.groupby("qid").agg({"p-MRR": "mean"})
+    return float(qid_wise["p-MRR"].mean())
 
 
-def _rank_documents(doc_scores: Dict[str, float]) -> Dict[str, int]:
-    """Convert {doc_id: score} to {doc_id: rank} (1-indexed, descending)."""
+def _rank_score(x) -> float:
+    """Pairwise rank score — identical to MTEB ``rank_score``.
+
+    If og_rank >= new_rank (doc moved up or stayed — bad for should-decrease docs):
+        score = (1/og_rank) / (1/new_rank) - 1    → negative
+    Else (doc moved down — good):
+        score = 1 - (1/new_rank) / (1/og_rank)    → positive
+    """
+    if x["og_rank"] >= x["new_rank"]:
+        return ((1 / x["og_rank"]) / (1 / x["new_rank"])) - 1
+    else:
+        return 1 - ((1 / x["new_rank"]) / (1 / x["og_rank"]))
+
+
+def _get_rank_from_dict(
+    doc_scores: Dict[str, float], doc_id: str
+) -> Tuple[int, float]:
+    """Find the 1-indexed rank and score of *doc_id* in a results dict.
+
+    Identical to MTEB ``get_rank_from_dict``.  If the document is not
+    found, returns ``(len(results) + 1, 0)``.
+    """
     sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)
-    return {doc_id: rank + 1 for rank, (doc_id, _) in enumerate(sorted_docs)}
+    for i, (did, score) in enumerate(sorted_docs):
+        if did == doc_id:
+            return i + 1, score
+    return len(sorted_docs) + 1, 0.0

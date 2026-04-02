@@ -386,13 +386,13 @@ def evaluate_bm25(
     model.index_corpus(corpus)
     results = model.retrieve(queries, top_k=top_k)
 
-    # For mFollowIR, compute ndcg only on instructed queries (_inst suffix)
+    # For mFollowIR, compute ndcg only on changed queries (-changed suffix)
     if isinstance(task, MFollowIRRuRetrieval):
-        inst_results = {qid: r for qid, r in results.items() if qid.endswith("_inst")}
-        inst_qrels = {
-            qid: q for qid, q in relevant_docs.items() if qid.endswith("_inst")
+        changed_results = {qid: r for qid, r in results.items() if qid.endswith("-changed")}
+        changed_qrels = {
+            qid: q for qid, q in relevant_docs.items() if qid.endswith("-changed")
         }
-        metrics = compute_retrieval_metrics(inst_qrels, inst_results)
+        metrics = compute_retrieval_metrics(changed_qrels, changed_results)
     else:
         metrics = compute_retrieval_metrics(relevant_docs, results)
     return metrics
@@ -437,14 +437,14 @@ def evaluate_dense_custom(
 
     results = _dense_retrieve(model, queries, corpus, batch_size, top_k)
 
-    # For mFollowIR, compute ndcg only on instructed queries (_inst suffix)
-    # Standard queries are only used for p-MRR comparison
+    # For mFollowIR, compute ndcg only on changed queries (-changed suffix)
+    # Original queries (-og) are only used for p-MRR comparison
     if isinstance(task, MFollowIRRuRetrieval):
-        inst_results = {qid: r for qid, r in results.items() if qid.endswith("_inst")}
-        inst_qrels = {
-            qid: q for qid, q in relevant_docs.items() if qid.endswith("_inst")
+        changed_results = {qid: r for qid, r in results.items() if qid.endswith("-changed")}
+        changed_qrels = {
+            qid: q for qid, q in relevant_docs.items() if qid.endswith("-changed")
         }
-        metrics = compute_retrieval_metrics(inst_qrels, inst_results)
+        metrics = compute_retrieval_metrics(changed_qrels, changed_results)
     else:
         metrics = compute_retrieval_metrics(relevant_docs, results)
     return results, metrics
@@ -535,38 +535,60 @@ def evaluate_pmrr_synthetic(
 ) -> float:
     """Compute p-MRR from pre-computed retrieval results.
 
-    Uses query pairs from any task that implements get_query_pairs().
-    Works with both RuPrompTrieverTestRetrieval and MFollowIRRuRetrieval.
+    For MFollowIRRuRetrieval: uses the official qrel_diff approach
+    (documents whose relevance changed between original and changed
+    instructions).
+
+    For RuPrompTrieverTestRetrieval: the task does not have qrel_diff,
+    so we fall back to computing changed docs from the qrels directly.
     """
     pairs = task.get_query_pairs()
     if not pairs:
         logger.warning("No query pairs found for p-MRR computation.")
         return 0.0
 
+    # --- mFollowIR path: use official qrel_diff ---
+    if isinstance(task, MFollowIRRuRetrieval):
+        qrel_diff = task.get_qrel_diff()
+        og_results = {qid: r for qid, r in all_results.items() if qid.endswith("-og")}
+        changed_results = {qid: r for qid, r in all_results.items() if qid.endswith("-changed")}
+        return compute_pmrr(
+            results_original=og_results,
+            results_changed=changed_results,
+            qrel_diff=qrel_diff,
+        )
+
+    # --- Synthetic test path: derive qrel_diff from qrels ---
+    # For synthetic test, changed docs = instruction negatives
+    # (docs relevant to standard query but not to instructed query)
     split = "test"
     relevant_docs = task.relevant_docs[split]
 
-    std_results = {}
-    inst_results = {}
-    std_relevant = {}
-    inst_relevant = {}
+    # Build a synthetic qrel_diff from qrels
+    qrel_diff = {}
+    og_results = {}
+    changed_results = {}
 
     for std_qid, inst_qid in pairs:
         if std_qid in all_results:
-            std_results[std_qid] = all_results[std_qid]
+            og_results[f"{std_qid}-og"] = all_results[std_qid]
         if inst_qid in all_results:
-            inst_results[inst_qid] = all_results[inst_qid]
-        if std_qid in relevant_docs:
-            std_relevant[std_qid] = relevant_docs[std_qid]
-        if inst_qid in relevant_docs:
-            inst_relevant[inst_qid] = relevant_docs[inst_qid]
+            changed_results[f"{std_qid}-changed"] = all_results[inst_qid]
+
+        std_relevant = {
+            k for k, v in relevant_docs.get(std_qid, {}).items() if v > 0
+        }
+        inst_relevant = {
+            k for k, v in relevant_docs.get(inst_qid, {}).items() if v > 0
+        }
+        should_decrease = std_relevant - inst_relevant
+        if should_decrease:
+            qrel_diff[std_qid] = list(should_decrease)
 
     return compute_pmrr(
-        results_standard=std_results,
-        results_instructed=inst_results,
-        query_pairs=pairs,
-        relevant_docs_standard=std_relevant,
-        relevant_docs_instructed=inst_relevant,
+        results_original=og_results,
+        results_changed=changed_results,
+        qrel_diff=qrel_diff,
     )
 
 
