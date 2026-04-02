@@ -22,7 +22,7 @@ Usage:
 import argparse
 import logging
 import os
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from huggingface_hub import HfApi
 import mteb
@@ -435,7 +435,12 @@ def evaluate_dense_custom(
         }
         corpus = _trim_corpus_for_smoke_test(corpus, relevant_docs)
 
-    results = _dense_retrieve(model, queries, corpus, batch_size, top_k)
+    # For instruction-following datasets, queries already embed the full task
+    # instruction. Suppress model-level query prompts (e.g. GigaEmbeddings'
+    # task-description prefix) to avoid double-wrapping.
+    query_prompt_name = "query" if dataset_type in ("rumteb", "en_mteb") else None
+
+    results = _dense_retrieve(model, queries, corpus, batch_size, top_k, query_prompt_name)
 
     # For mFollowIR, compute ndcg only on changed queries (-changed suffix)
     # Original queries (-og) are only used for p-MRR comparison
@@ -603,8 +608,15 @@ def _dense_retrieve(
     corpus: Dict[str, dict],
     batch_size: int = 32,
     top_k: int = 1000,
+    query_prompt_name: Optional[str] = "query",
 ) -> Dict[str, Dict[str, float]]:
-    """Retrieve using dense model: encode queries and corpus, compute cosine."""
+    """Retrieve using dense model: encode queries and corpus, compute cosine.
+
+    Args:
+        query_prompt_name: Passed as prompt_name when encoding queries. Set to
+            None for instruction-following datasets (mfollowir, synthetic_test)
+            where task-specific prompts are already embedded in the query text.
+    """
     query_ids = list(queries.keys())
     query_texts = [queries[qid] for qid in query_ids]
 
@@ -616,8 +628,8 @@ def _dense_retrieve(
         text = doc.get("text", "")
         doc_texts.append(f"{title}. {text}" if title else text)
 
-    logger.info(f"Encoding {len(query_texts)} queries...")
-    q_embs = model.encode(query_texts, batch_size=batch_size, prompt_name="query")
+    logger.info(f"Encoding {len(query_texts)} queries (prompt_name={query_prompt_name!r})...")
+    q_embs = model.encode(query_texts, batch_size=batch_size, prompt_name=query_prompt_name)
 
     logger.info(f"Encoding {len(doc_texts)} documents...")
     d_embs = model.encode(doc_texts, batch_size=batch_size, prompt_name="passage")
