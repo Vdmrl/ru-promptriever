@@ -16,7 +16,7 @@ The pipeline consists of the following stages:
 2. **Synthetic Data Generation:**
    * Generating specific instructions for existing queries using LLMs (GigaChat-2-Max).
    * Mining "Instruction Negatives" — synthetic documents that are relevant to the query but irrelevant to the specific instruction.
-3. **Filtration:** 
+3. **Filtration:**
    * Validating synthetic triplets using an LLM-based pipeline (`GigaChat-2-Lite`) to filter out bad positive matches and weak negatives.
    * Ensuring negatives genuinely violate the generated instructions.
 4. **Training:** Fine-tuning a backbone LLM (Qwen3 8b/4b) as a bi-encoder using the curated dataset.
@@ -114,9 +114,11 @@ The `evaluation_pipeline/` directory contains a full benchmarking suite to compa
    ```bash
    huggingface-cli login
    ```
+
    *Alternative: If `huggingface-cli` is not found, you can login via Python:*
+
    ```bash
-   python3 -c "from huggingface_hub import login; login('ВАШ_ТОКЕН_ЗДЕСЬ')"
+   python3 -c "from huggingface_hub import login; login('YOUR_TOKEN_HERE')"
    ```
 
 ### Running the Evaluation
