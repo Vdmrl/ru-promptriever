@@ -435,10 +435,15 @@ def evaluate_dense_custom(
         }
         corpus = _trim_corpus_for_smoke_test(corpus, relevant_docs)
 
-    # For instruction-following datasets, queries already embed the full task
-    # instruction. Suppress model-level query prompts (e.g. GigaEmbeddings'
-    # task-description prefix) to avoid double-wrapping.
-    query_prompt_name = "query" if dataset_type in ("rumteb", "en_mteb") else None
+    # GigaEmbeddings wraps queries with a task-description prefix via prompt_name="query".
+    # On instruction-following datasets (mfollowir, synthetic_test) queries already embed
+    # the full task instruction, so suppress this extra wrapping only for giga_embedding.
+    # CausalLM models (Promptriever) use prompt_name="query" for a format token ("query: ")
+    # that must always be applied regardless of dataset type.
+    if dataset_type in ("mfollowir", "synthetic_test") and model_type == "giga_embedding":
+        query_prompt_name = None
+    else:
+        query_prompt_name = "query"
 
     results = _dense_retrieve(model, queries, corpus, batch_size, top_k, query_prompt_name)
 
