@@ -37,14 +37,86 @@ def _last_token_pool(
 
 
 def _is_peft_model(model_name_or_path: str) -> bool:
-    """Check if the model is a PEFT/LoRA model by looking for adapter_config.json."""
+    """Check if the model is a PEFT/LoRA model with actual adapter weights.
+
+    Merged models may retain a leftover adapter_config.json without adapter
+    weights. We verify that adapter_model.safetensors or adapter_model.bin
+    actually exists before treating the model as PEFT.
+    """
     try:
         from peft import PeftConfig
 
         PeftConfig.from_pretrained(model_name_or_path)
-        return True
     except Exception:
         return False
+
+    import os
+
+    if os.path.isdir(model_name_or_path):
+        return os.path.exists(
+            os.path.join(model_name_or_path, "adapter_model.safetensors")
+        ) or os.path.exists(
+            os.path.join(model_name_or_path, "adapter_model.bin")
+        )
+
+    # HuggingFace Hub: check if adapter weight files exist in the repo
+    try:
+        from huggingface_hub import repo_info
+
+        info = repo_info(model_name_or_path)
+        filenames = {f.rfilename for f in info.siblings}
+        has_adapter_weights = (
+            "adapter_model.safetensors" in filenames
+            or "adapter_model.bin" in filenames
+        )
+        if not has_adapter_weights:
+            logger.info(
+                f"Found adapter_config.json but no adapter weights in "
+                f"{model_name_or_path} — treating as merged model"
+            )
+        return has_adapter_weights
+    except Exception:
+        return True
+
+
+def _detect_peft_base_class(model_name_or_path: str):
+    """Detect whether PEFT adapter was trained on AutoModel or AutoModelForCausalLM.
+
+    Inspects adapter weight key prefixes:
+      - 'base_model.model.model.' → trained on AutoModelForCausalLM
+      - 'base_model.model.' (no extra .model.) → trained on AutoModel
+    """
+    import os
+
+    from safetensors import safe_open
+
+    # Locate adapter weights
+    if os.path.isdir(model_name_or_path):
+        adapter_path = os.path.join(model_name_or_path, "adapter_model.safetensors")
+        if not os.path.exists(adapter_path):
+            adapter_path = os.path.join(model_name_or_path, "adapter_model.bin")
+    else:
+        from huggingface_hub import hf_hub_download
+
+        try:
+            adapter_path = hf_hub_download(
+                model_name_or_path, "adapter_model.safetensors"
+            )
+        except Exception:
+            adapter_path = hf_hub_download(model_name_or_path, "adapter_model.bin")
+
+    # Read keys without loading tensors
+    if adapter_path.endswith(".safetensors"):
+        with safe_open(adapter_path, framework="pt") as f:
+            keys = list(f.keys())
+    else:
+        state_dict = torch.load(adapter_path, map_location="cpu", weights_only=True)
+        keys = list(state_dict.keys())
+
+    uses_causal_lm = any("base_model.model.model." in k for k in keys)
+    base_cls = AutoModelForCausalLM if uses_causal_lm else AutoModel
+    logger.info(f"Detected PEFT base class: {base_cls.__name__}")
+    return base_cls
 
 
 class CausalLMRetriever(EncoderProtocol, BaseRetriever):
@@ -85,7 +157,8 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
             base_model_name = peft_config.base_model_name_or_path
             logger.info(f"Base model: {base_model_name}")
 
-            base_model = AutoModel.from_pretrained(
+            base_cls = _detect_peft_base_class(model_name_or_path)
+            base_model = base_cls.from_pretrained(
                 base_model_name,
                 torch_dtype=torch_dtype,
                 device_map="auto",
