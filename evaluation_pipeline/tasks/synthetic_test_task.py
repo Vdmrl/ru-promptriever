@@ -37,7 +37,7 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
             "instruction-augmented query pairs."
         ),
         dataset={
-            "path": "Vladimirlv/ru-promptriever-dataset-v0.1",
+            "path": "Vladimirlv/ru-promptriever-dataset",
             "revision": "main",
         },
         type="Retrieval",
