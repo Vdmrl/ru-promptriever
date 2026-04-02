@@ -11,7 +11,7 @@ retrieval_top_k: 1000
 
 # Generic instruction for OOD benchmarks (ruMTEB) where no instructions exist.
 # Appended to query for Promptriever-type models to avoid out-of-distribution.
-generic_instruction: "Найди релевантный документ."
+generic_instruction: ""
 
 # --- Models ---
 models:
