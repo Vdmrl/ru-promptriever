@@ -87,10 +87,10 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
             repo_type="dataset",
         )
 
-        logger.info("Downloading test.parquet from HuggingFace...")
+        logger.info("Downloading test data from HuggingFace...")
         test_path = hf_hub_download(
             repo_id=dataset_path,
-            filename="test.parquet",
+            filename="data/test-00000-of-00001.parquet",
             repo_type="dataset",
         )
 
