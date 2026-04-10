@@ -124,7 +124,7 @@ class FilterProcessor:
         query = idata["rewritten_query"]
         instruction = idata["instruction"]
 
-        # Build a minimal snippet used for deleted_queries log
+        # Snapshot for the deleted_queries log: minimal metadata without full passage content.
         query_meta = {
             "query_id": record["query_id"],
             "original_query": record["original_query"],
@@ -137,7 +137,7 @@ class FilterProcessor:
         final_pos_source = None
         final_pos_id = None
         final_pos_title = ""
-        # For deleted_queries log: track what was checked and why it failed
+        # Track all positive candidates attempted, including sources and LLM reasoning.
         checked_positives = []
 
         try:
@@ -164,7 +164,8 @@ class FilterProcessor:
                 final_pos_id = str(record["original_positive_id"])
                 final_pos_title = idata.get("rewritten_pos_title", "")
             else:
-                # Fallback: try synthetic positive (matches_both=true)
+                # Primary positive failed: fall back to a synthetically generated
+                # positive (a document with matches_both=True from the mining stage).
                 synth_pos = next(
                     (d for d in mdata.get("documents", []) if d.get("matches_both")),
                     None,
@@ -201,6 +202,8 @@ class FilterProcessor:
 
         except Exception as e:
             err_str = str(e)
+            # On connection failure, invalidate the cached LLM so a fresh
+            # connection is established on the next invocation.
             if "Connection" in err_str or "Errno" in err_str:
                 if hasattr(self._thread_local, "llm"):
                     del self._thread_local.llm
@@ -233,7 +236,7 @@ class FilterProcessor:
                         }
                     )
                 else:
-                    # Record what was dropped for analysis
+                    # Document was falsely considered a negative; log it for analysis.
                     filtered_out_negs.append(
                         {
                             "query_id": record["query_id"],
@@ -249,6 +252,8 @@ class FilterProcessor:
 
         except Exception as e:
             err_str = str(e)
+            # On connection failure, invalidate the cached LLM so a fresh
+            # connection is established on the next invocation.
             if "Connection" in err_str or "Errno" in err_str:
                 if hasattr(self._thread_local, "llm"):
                     del self._thread_local.llm

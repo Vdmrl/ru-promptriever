@@ -1,3 +1,10 @@
+"""
+LLM client factory for the data generation pipeline.
+
+Reads provider credentials and model settings from a YAML config file
+and returns a LangChain-compatible chat model instance (GigaChat or OpenAI).
+"""
+
 import yaml
 import os
 from typing import Union, Dict, Optional
@@ -6,6 +13,18 @@ from langchain_openai import ChatOpenAI
 
 
 def load_config(config_path: str) -> Dict:
+    """Parse the model_info section from a YAML config file.
+
+    Args:
+        config_path: Path to the YAML configuration file.
+
+    Returns:
+        The ``model_info`` dict from the parsed YAML.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        RuntimeError: If the file cannot be parsed or lacks ``model_info``.
+    """
     if not config_path or not os.path.exists(config_path):
         raise FileNotFoundError(f"CRITICAL: Config file not found at '{config_path}'")
 
@@ -23,13 +42,22 @@ def create_llm_instance(
         config_path: str = "configs/config.yaml",
         temperature: Optional[float] = None
 ) -> Union[GigaChat, ChatOpenAI]:
-    """
-    Creates LLM instance based on config.
-    If temperature is None, it loads from config.
+    """Instantiate an LLM client from a YAML config file.
+
+    Args:
+        config_path: Path to the YAML config containing ``model_info``.
+        temperature:  Sampling temperature. If ``None``, the value from the
+                      config file is used; if absent there too, defaults to 0.1.
+
+    Returns:
+        A LangChain chat model instance (``GigaChat`` or ``ChatOpenAI``).
+
+    Raises:
+        ValueError: If the ``provider`` field is not ``gigachat`` or ``openai``.
     """
     cfg = load_config(config_path)
 
-    # Priority: Function Argument > Config File > Default (0.1)
+    # Temperature resolution order: argument > config file > built-in default (0.1).
     if temperature is None:
         temperature = cfg.get("temperature", 0.1)
 

@@ -69,7 +69,7 @@ def build_model(cfg: dict):
     else:
         quantization_kwargs = {}
 
-    # Hardware Optimizations
+    # Enable TF32 on CUDA matmul and cuDNN for additional throughput.
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
@@ -84,7 +84,8 @@ def build_model(cfg: dict):
     if use_4bit:
         model = prepare_model_for_kbit_training(model)
 
-    # Freeze specified number of bottom layers to accelerate backward pass
+    # Freezing the bottom transformer layers speeds up backpropagation at the
+    # cost of those layers not being updated during fine-tuning.
     freeze_bottom_layers = cfg.get("freeze_bottom_layers", 0)
     if freeze_bottom_layers > 0:
         if hasattr(model, "model") and hasattr(model.model, "layers"):
@@ -94,7 +95,7 @@ def build_model(cfg: dict):
                 for param in layers[i].parameters():
                     param.requires_grad = False
             print(
-                f"[OPTIMIZATION] Froze the bottom {frozen_count} layers of the transformer to massively accelerate backward pass."
+                f"[OPTIMIZATION] Froze the bottom {frozen_count} transformer layers."
             )
 
     peft_config = LoraConfig(
@@ -150,7 +151,8 @@ def train(cfg: dict) -> None:
     # 3. Model
     model = build_model(cfg)
 
-    # 4. Training arguments (early init for DDP main_process_first)
+    # 4. Training arguments (TrainingArguments is initialized early so that
+    #    main_process_first() is available for dataset preparation in DDP runs).
     training_args = TrainingArguments(
         output_dir=cfg.get("output_dir", "./output_model"),
         per_device_train_batch_size=cfg.get("per_device_train_batch_size", 1),
@@ -217,8 +219,6 @@ def train(cfg: dict) -> None:
     print(f"[data] Loaded {len(train_dataset)} training examples")
     print(f"[data] Negatives per query: {cfg.get('num_negatives', 7)}")
 
-    # 6. Trainer Setup
-
     # 6. Trainer
     trainer = RetrieverTrainer(
         model=model,
@@ -233,10 +233,11 @@ def train(cfg: dict) -> None:
     # 7. Train
     print("[train] Starting training...")
 
-    # Setup resume_from_checkpoint logic
+    # Determine whether to resume from a checkpoint:
+    # priority 1 — local checkpoint directory; priority 2 — HF Hub.
     resume_from_checkpoint = False
 
-    # 1. Resume from local checkpoint directory if available
+    # Priority 1: Resume from a locally present checkpoint directory.
     if os.path.exists(training_args.output_dir):
         import glob
 
@@ -252,7 +253,8 @@ def train(cfg: dict) -> None:
             )
             print("[train] Found local 'last-checkpoint'. Resuming from it.")
 
-    # 2. Optionally fallback to HF Hub checkpoint repository to download optimizer states
+    # Priority 2: Fall back to the HF Hub if no local checkpoint was found;
+    # download optimizer states and model weights to resume from there.
     hub_model_id = cfg.get("hub_model_id")
     if not resume_from_checkpoint and hub_model_id:
         from huggingface_hub import HfApi, snapshot_download
@@ -261,7 +263,8 @@ def train(cfg: dict) -> None:
             api = HfApi()
             info = api.model_info(hub_model_id)
 
-            # Check if there's a checkpoint folder in the repo
+            # Download the full snapshot (model + optimizer states) only when
+            # remote checkpoints exist, to avoid unnecessary bandwidth usage.
             has_checkpoint = any(
                 "checkpoint" in sibling.rfilename for sibling in info.siblings
             )
@@ -274,7 +277,7 @@ def train(cfg: dict) -> None:
                     repo_id=hub_model_id, local_dir=training_args.output_dir
                 )
 
-                # Check what was downloaded
+                # Detect what was downloaded: checkpoint-* dirs or 'last-checkpoint'.
                 checkpoints = glob.glob(
                     os.path.join(training_args.output_dir, "checkpoint-*")
                 )
@@ -311,12 +314,12 @@ def main():
         action="store_true",
         help="Whether to include duplicated copies of repeated queries in the dataset",
     )
-    # Allow DeepSpeed to inject its own CLI arguments
+    # Allow DeepSpeed CLI arguments to pass through without causing argparse errors.
     args, unknown = parser.parse_known_args()
 
     cfg = load_config(args.config)
     
-    # Override config with parsed CLI args
+    # Command-line flags override the corresponding config file settings.
     if args.use_repeated:
         cfg["use_repeated"] = True
         

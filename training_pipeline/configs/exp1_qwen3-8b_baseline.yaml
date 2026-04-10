@@ -1,0 +1,71 @@
+# =============================================================================
+# Experiment 1: Qwen3-8B baseline trained on the unfiltered dataset (v0.1).
+# Target hardware: 2× RTX 5090 on Vast.ai.
+# Launch: deepspeed --num_gpus=2 train.py --config configs/exp1_qwen3-8b_baseline.yaml
+# =============================================================================
+
+# --- General Hub & Logging ---
+hub_model_id: "Vladimirlv/ru-promptriever-v0.1-baseline"
+wandb_project: "ru-promptriever"
+run_name: "exp1_v0.1_baseline"
+output_dir: "./output_exp1_v0.1"
+
+# --- Model ---
+model_name_or_path: "Qwen/Qwen3-8B"
+attn_implementation: "sdpa"   # PyTorch SDPA; use "flash_attention_2" if supported
+torch_dtype: "bfloat16"
+
+# --- LoRA Configuration ---
+# Pure bfloat16 LoRA (load_in_4bit: false) for maximum throughput on RTX 5090s.
+# Switch to load_in_4bit: true for 4-bit QLoRA if VRAM is insufficient.
+lora_r: 32
+lora_alpha: 64      # α = 2r keeps the effective learning rate stable across ranks
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# --- Data ---
+train_data_path: "hf://datasets/Vladimirlv/ru-promptriever-dataset-v0.1/train.parquet"
+eval_data_path: "hf://datasets/Vladimirlv/ru-promptriever-dataset-v0.1/val.parquet"
+num_negatives: 30              # Total negatives per query (instruction + hard negatives)
+max_len_query: 304
+max_len_passage: 256
+
+# --- GradCache ---
+# gc_chunk_size: physical sub-batch processed in a single forward pass.
+# Each query contributes 1 + num_negatives = 31 passages; keep chunk_size small
+# to avoid cuBLAS CUBLAS_STATUS_INVALID_VALUE errors with bitsandbytes.
+gc_chunk_size: 2               # 2 queries × 31 passages = 62 passages per chunk
+
+# --- Training ---
+# Effective batch size = per_device × accum_steps × num_gpus = 64 × 1 × 2 = 128.
+# Matches the Promptriever / RepLLaMA paper exactly.
+# gradient_accumulation_steps is set to 1 so that Accelerate does not wrap
+# GradCache in a nested no_sync context (which would deadlock).
+per_device_train_batch_size: 64
+gradient_accumulation_steps: 1   # Effective batch = 64 × 1 × 2 GPUs = 128
+num_train_epochs: 1
+max_steps: -1                     # -1 = run for the full epoch
+learning_rate: 1.0e-4
+warmup_steps: 100
+fp16: false
+bf16: true
+load_in_4bit: false               # Disable 4-bit QLoRA; use full bfloat16 LoRA
+evaluation_strategy: "steps"
+eval_steps: 500
+logging_steps: 10
+save_strategy: "steps"
+save_steps: 500
+push_to_hub: true                 # Upload checkpoints to HF Hub; guards against Vast.ai preemption
+gradient_checkpointing: true
+dataloader_num_workers: 4
+temperature: 0.01
+
+# --- Logging Auth ---
+report_to: "wandb"
+wandb_key: null                   # Set here or via the WANDB_API_KEY environment variable

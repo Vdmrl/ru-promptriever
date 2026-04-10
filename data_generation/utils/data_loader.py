@@ -15,12 +15,12 @@ class DataLoader:
         self.queries_path = queries_path
         self.triples_path = triples_path
 
-        # main data stores
-        self.collection = {}  # int -> str
-        self.queries = {}  # int -> str
+        # In-memory lookup tables populated by load_memory().
+        self.collection: dict[int, str] = {}  # passage_id -> passage_text
+        self.queries: dict[int, str] = {}     # query_id   -> query_text
 
     def load_memory(self):
-        # loads queries and collection into ram
+        """Load queries and the document collection entirely into RAM."""
         print(f"[Loader] Loading QUERIES from {os.path.basename(self.queries_path)}...")
         with open(self.queries_path, 'r', encoding='utf-8') as f:
             for line in f:
@@ -43,12 +43,16 @@ class DataLoader:
 
         print(f"[Loader] Done. Loaded {len(self.collection)} docs and {len(self.queries)} queries.")
 
-        # force garbage collection
+        # Release any unused memory after the bulk load.
         gc.collect()
 
     def yield_triples(self, offset=0, limit=None):
-        # Read triplet file line by line and fetches text from memory
-        # Logic modified to deduplicate Query IDs on the fly
+        """Stream triples from disk, resolving IDs to text from memory.
+
+        Deduplicates on query_id so each query appears at most once. The
+        ``offset`` and ``limit`` parameters operate on the deduplicated stream,
+        enabling independent parallel workers to cover disjoint query ranges.
+        """
         unique_queries_count = 0
         yielded = 0
         seen_queries = set()
@@ -67,13 +71,13 @@ class DataLoader:
                 try:
                     qid = int(parts[0])
 
-                    # Deduplication: if we processed this query already (even if skipped), ignore it
+                    # Skip duplicate appearances of the same query_id.
                     if qid in seen_queries:
                         continue
 
                     seen_queries.add(qid)
 
-                    # Check offset based on UNIQUE queries found so far
+                    # Offset is counted against unique query positions, not raw line numbers.
                     if unique_queries_count < offset:
                         unique_queries_count += 1
                         continue

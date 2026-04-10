@@ -1,7 +1,7 @@
 # =============================================================================
-# Experiment 3 (Final): Qwen3-4B with full Promptriever recipe
-# Config for final training on 4x RTX 5090
-# Launch: torchrun --nproc_per_node=4 train.py --config configs/v1.0_final_4b_4_5090.yaml
+# Experiment 4: Qwen3-4B with the full Promptriever recipe — final production run.
+# Target hardware: 4× RTX 5090 on Vast.ai.
+# Launch: torchrun --nproc_per_node=4 train.py --config configs/exp4_qwen3-4b_final.yaml
 # =============================================================================
 
 # --- General Hub & Logging ---
@@ -16,7 +16,8 @@ attn_implementation: "sdpa"
 torch_dtype: "bfloat16"
 
 # --- LoRA Configuration ---
-# All 7 targets from the Promptriever paper (Appendix B): attention + MLP
+# All 7 projection targets from the Promptriever paper (Appendix B):
+# attention projections (q, k, v, o) and MLP projections (gate, up, down).
 lora_r: 32
 lora_alpha: 64
 lora_target_modules:
@@ -33,19 +34,20 @@ train_data_path: "Vladimirlv/ru-promptriever-dataset"
 eval_data_path: "Vladimirlv/ru-promptriever-dataset"
 train_split: "train"
 eval_split: "validation"
-instruct_only: false                   # Full ~1M dataset (standard + instruction rows)
-num_negatives: 30                      # Paper: 30 negatives per query
-num_instruct_negatives: 3              # Up to 3 instruction negatives (instruct rows only)
-max_len_query: 512                     # Bumped to 512 to guarantee 1.5k character instructions fit safely
+instruct_only: false             # Use the full ~1 M dataset (standard + instruction-augmented rows)
+num_negatives: 30                # Total negatives per query, matching the original paper
+num_instruct_negatives: 3        # Up to 3 instruction-negative passages per instructed query
+max_len_query: 512               # Extended to 512 to safely accommodate long instructions (~1.5 k chars)
 max_len_passage: 256
 
 # --- GradCache ---
-# With 30 negatives (31 passages/query), chunk_size=2 -> 62 passages per chunk.
-# If OOM, reduce to 1.
+# With 30 negatives (31 passages per query), chunk_size=2 → 62 passages per chunk.
+# Reduce to 1 if OOM occurs.
 gc_chunk_size: 2
 
 # --- Training ---
-# Effective batch = per_device x accum x gpus = 8 x 4 x 4 = 128 (matches paper)
+# Effective batch size = per_device × accum_steps × num_gpus = 8 × 4 × 4 = 128.
+# Matches the Promptriever / RepLLaMA paper configuration.
 per_device_train_batch_size: 8
 gradient_accumulation_steps: 4
 
@@ -66,7 +68,7 @@ per_device_eval_batch_size: 2
 logging_steps: 10
 save_strategy: "steps"
 save_steps: 250
-save_total_limit: 3      
+save_total_limit: 3              # Keep only the 3 most recent checkpoints to limit disk usage
 push_to_hub: true
 gradient_checkpointing: true
 dataloader_num_workers: 4
@@ -74,4 +76,4 @@ temperature: 0.01
 
 # --- Logging Auth ---
 report_to: "wandb"
-wandb_key: null
+wandb_key: null                  # Set here or via the WANDB_API_KEY environment variable

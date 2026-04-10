@@ -1,23 +1,23 @@
 # =============================================================================
-# Evaluation Pipeline Configuration
+# Evaluation Pipeline Configuration — Baseline: Qwen3-4B
 # =============================================================================
 
 # --- General ---
 device: "cuda:0"
 dtype: "bfloat16"
 output_dir: "./results"
-# Top-K documents retrieved per query (must be >= max eval cutoff, e.g. 1000 for p-MRR).
+# Must be >= the largest metric cutoff used (e.g. 1000 for p-MRR computation).
 retrieval_top_k: 1000
 
-# Generic instruction for OOD benchmarks (ruMTEB) where no instructions exist.
-# Appended to query for Promptriever-type models to avoid out-of-distribution.
+# Generic instruction appended to queries for Promptriever-type models on
+# ruMTEB/BEIR benchmarks where no per-instance instruction exists. Set to an
+# empty string to evaluate without any instruction prefix.
 generic_instruction: ""
 
 # --- Models ---
 models:
   - name: "bm25"
     type: "bm25"
-    # No model_name_or_path needed
     batch_size: 512
 
   - name: "multilingual-e5-large"
@@ -25,7 +25,7 @@ models:
     model_name_or_path: "intfloat/multilingual-e5-large"
     batch_size: 64
     max_length: 512
-    # E5 requires "query: " / "passage: " prefixes
+    # E5 models require explicit "query: " / "passage: " task prefixes at inference.
     query_prefix: "query: "
     passage_prefix: "passage: "
 
@@ -42,7 +42,7 @@ models:
     model_name_or_path: "samaya-ai/promptriever-llama3.1-8b-v1"
     batch_size: 16
     max_length: 512
-    # Promptriever uses double-space after prefix (as documented on HF model page)
+    # Double-space separator after prefix is required by the Promptriever HF model card.
     query_prefix: "query:  "
     passage_prefix: "passage:  "
 
@@ -77,6 +77,7 @@ datasets:
 
   - name: "mfollowir_ru"
     type: "mfollowir"
+    # Russian split of mFollowIR: https://huggingface.co/datasets/jhu-clsp/mFollowIR
     data_path: "jhu-clsp/mFollowIR"
     metrics:
       - "ndcg_at_20"
@@ -84,15 +85,15 @@ datasets:
 
   - name: "rumteb_retrieval"
     type: "rumteb"
-    # Built-in MTEB task names for Russian retrieval
+    # Standard Russian retrieval tasks from the MTEB benchmark suite.
     task_names:
       - "RuBQRetrieval"
     metrics:
       - "ndcg_at_10"
 
-  # Small BEIR datasets to verify metrics match published Promptriever paper scores.
-  # SciFact: 5k docs, 300 queries. NFCorpus: 3.6k docs, 323 queries.
-  # Total runtime: ~5-10 min for all models.
+  # English MTEB sanity-check tasks: small collections with fast runtimes.
+  # SciFact: 5 k docs, 300 queries. NFCorpus: 3.6 k docs, 323 queries.
+  # Used to verify that model scores align with published Promptriever paper results.
   - name: "en_mteb_retrieval"
     type: "en_mteb"
     task_names:

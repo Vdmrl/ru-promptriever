@@ -57,17 +57,17 @@ class EncoderWrapper(nn.Module):
         super().__init__()
         self.model = model
 
-        # PRE-CACHE LM HEAD OWNER:
-        # When using PEFT/LoRA, the layer structure gets aggressively rewritten.
-        # Instead of traversing the tree blindly every single forward pass,
-        # we find the CausalLM base exactly ONE time and cache it.
+        # Cache the lm_head owner exactly once at construction time.
+        # When PEFT/LoRA rewrites the model graph, traversing named_modules()
+        # on every forward pass would add non-trivial overhead.
         self._owner_of_lm_head = None
         for name, module in self.model.named_modules():
             if "lm_head" in module._modules:
                 self._owner_of_lm_head = module
                 break
 
-        # Fallback for strange Peft configurations where lm_head is a direct attribute
+        # Fallback for PEFT configurations where lm_head is not nested inside
+        # a sub-module but is a direct attribute of the top-level model.
         if self._owner_of_lm_head is None:
             curr = self.model
             while curr is not None:
@@ -113,12 +113,12 @@ class EncoderWrapper(nn.Module):
             original_lm_head = getattr(owner_of_lm_head, "lm_head", None)
             owner_of_lm_head.lm_head = nn.Identity()
         elif owner_of_lm_head is None:
-            # We never expect this since named_modules is exhaustive, but just in case
+            # named_modules() is exhaustive, so this branch is not expected in practice.
             pass
 
         try:
-            # For CausalLM without output_hidden_states, outputs.logits IS the final hidden state
-            # because we replaced the lm_head projection with an Identity pass-through!
+            # With lm_head replaced by Identity, outputs.logits IS the final
+            # post-LayerNorm hidden state, matching the training objective.
             outputs = self.model(**kwargs)
             last_hidden = outputs.logits
         finally:
@@ -129,7 +129,7 @@ class EncoderWrapper(nn.Module):
         if attention_mask is not None:
             reps = _last_token_pool(last_hidden, attention_mask)
         else:
-            # Fallback: use the very last token of each sequence
+            # Fallback: use the very last token position when no mask is provided.
             reps = last_hidden[:, -1, :]
 
         return F.normalize(reps, p=2, dim=1)
@@ -192,7 +192,7 @@ class RetrieverGradCache(GradCache):
         model_reps = []
 
         # We MUST completely bypass DDP during the no-grad pass to prevent
-        # early buffer broadcasts or DDP hang deadlocks.
+        # premature gradient buffer broadcasts or all-reduce hang deadlocks.
         original_model = model.model
         from torch.nn.parallel import DistributedDataParallel as DDP
 
@@ -200,8 +200,8 @@ class RetrieverGradCache(GradCache):
         if has_ddp:
             model.model = original_model.module
 
-        # Recursively find any module with gradient_checkpointing and disable it
-        # Cache this lookup to avoid O(N) traversal on every step
+        # Cache the gradient_checkpointing modules lookup to avoid O(N)
+        # traversal on every training step.
         if not hasattr(self, "_gc_modules"):
             self._gc_modules = []
             for m in model.modules():
@@ -292,7 +292,8 @@ class RetrieverGradCache(GradCache):
         random_states,
         sync_last_chunk=False,
     ):
-        # Cache the DDP engine lookup to avoid O(N) traversal on every chunk
+        # Cache the DDP/DeepSpeed engine lookup to avoid O(N) traversal
+        # on every forward-backward chunk.
         if not hasattr(self, "_ds_engine"):
             self._ds_engine = None
             if hasattr(model, "no_sync"):
@@ -326,7 +327,7 @@ class RetrieverGradCache(GradCache):
                 reps = self.get_reps(y)
 
                 surrogate = torch.dot(reps.flatten(), gradient.flatten())
-                # DeepSpeed requires we use engine.backward(loss) if available
+                # DeepSpeed requires engine.backward() instead of tensor.backward().
                 if hasattr(ds_engine, "backward"):
                     ds_engine.backward(surrogate)
                 else:

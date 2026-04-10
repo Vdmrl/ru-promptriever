@@ -10,7 +10,7 @@ from utils.data_loader import DataLoader
 from utils.processor import Processor
 from utils.scheduler import get_allowed_threads
 
-# lock for thread-safe file writing
+# Shared lock to serialize writes across worker threads.
 file_write_lock = threading.Lock()
 
 
@@ -41,7 +41,7 @@ def main():
 
     processor = Processor(config_path=args.config)
 
-    # max workers set to 8 based on max schedule allows
+    # Upper bound matches the weekend-mode cap from the scheduler (9 threads).
     executor = ThreadPoolExecutor(max_workers=9)
     futures = []
 
@@ -55,15 +55,15 @@ def main():
 
     try:
         while processed_count < args.limit:
-            # check thread limit based on schedule
+            # Enforce the time-based thread cap (lower during Moscow business hours).
             allowed_threads = get_allowed_threads()
 
-            # clean up futures
+            # Prune completed futures to prevent unbounded list growth.
             active_futures = [f for f in futures if not f.done()]
             futures = active_futures
             active_count = len(futures)
 
-            # submit new tasks
+            # Submit new tasks up to the allowed concurrency ceiling.
             while active_count < allowed_threads and processed_count < args.limit:
                 try:
                     sample = next(data_gen)
@@ -77,7 +77,7 @@ def main():
                             save_result(res, args.output)
 
                             if res['status'] != 'success':
-                                # use tqdm.write to avoid breaking progress bar
+                                # tqdm.write() is thread-safe and preserves the progress bar.
                                 tqdm.write(f"[ERR] QID: {res.get('query_id')} -> {res.get('error')}")
 
                         except Exception as e:

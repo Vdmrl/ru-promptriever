@@ -1,3 +1,17 @@
+"""
+merge_lora.py
+
+Merges a LoRA adapter into its base model and saves the full merged weights
+locally. Optionally pushes the merged model to the HuggingFace Hub.
+
+Usage:
+    python merge_lora.py \\
+        --base_model_name_or_path Qwen/Qwen3-4B \\
+        --lora_model_path ./output_model/checkpoint-500 \\
+        --output_dir ./merged_model \\
+        [--push_to_hub Vladimirlv/ru-promptriever-qwen3-4b]
+"""
+
 import argparse
 import os
 import torch
@@ -46,6 +60,8 @@ def main():
 
     print(f"Loading LoRA adapter from: {args.lora_model_path} and merging weights")
     model = PeftModel.from_pretrained(base_model, args.lora_model_path)
+    # merge_and_unload() folds adapter weight deltas into the base parameters
+    # and returns a plain nn.Module with no PEFT overhead.
     merged_model = model.merge_and_unload()
 
     print(f"Saving merged model to: {args.output_dir}")

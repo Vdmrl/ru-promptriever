@@ -14,7 +14,7 @@ from utils.processor import FilterProcessor
 from utils.scheduler import get_allowed_threads
 from utils.io import read_jsonl, get_jsonl_files
 
-# Thread-safe lock for writing to any output file
+# Shared lock to serialize writes across thread-pool callback threads.
 file_write_lock = threading.Lock()
 stats_lock = threading.Lock()
 
@@ -71,7 +71,7 @@ def main():
     output_dir = resolve(args.output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
-    # Shared log files written across all processed input files
+    # Shared log files aggregated across all processed input chunks.
     deleted_queries_path = os.path.join(output_dir, "deleted_queries.jsonl")
     deleted_negatives_path = os.path.join(output_dir, "deleted_negatives.jsonl")
 
@@ -89,21 +89,22 @@ def main():
 
     for in_file in input_files:
         base_name = os.path.splitext(os.path.basename(in_file))[0]
-        # Output file mirrors the input name with _filtered suffix
+        # Mirror input filename with a _filtered suffix.
         out_file = os.path.join(output_dir, f"{base_name}_filtered.jsonl")
 
-        # Skip already completed files
+        # Idempotency guard: skip this file if it was fully processed in a prior run.
         done_marker = out_file + ".done"
         if os.path.exists(done_marker) and os.path.exists(out_file):
             print(f"[Main] Skipping completed file: {base_name}")
             continue
 
-        # Count total input records
+        # Count total lines upfront for the progress bar denominator.
         with open(in_file, "r", encoding="utf-8") as f:
             total_records = sum(1 for _ in f)
         print(f"\n[Main] Processing {base_name}.jsonl ({total_records} records)")
 
-        # Resume support via offset file
+        # Persist the number of fully completed records so later invocations
+        # can skip already-processed entries without reprocessing the entire file.
         offset_file = out_file + ".offset"
         offset = 0
         if os.path.exists(offset_file):
@@ -113,14 +114,15 @@ def main():
                 except ValueError:
                     pass
 
-        # Shared counters (mutated from callback threads)
+        # Mutable counters accessed from callback closures; using a list
+        # allows mutation from inner functions without `nonlocal`.
         stats = {
             "kept": 0,
             "discarded": 0,
             "failed": 0,
             "skipped_status": 0,
         }
-        completed_count = [0]  # list so closure can mutate it
+        completed_count = [0]  # Wrapped in a list to permit mutation from closures.
 
         executor = ThreadPoolExecutor(max_workers=9)
         futures = []
@@ -142,7 +144,8 @@ def main():
                 if args.limit is not None and submitted_count >= args.limit:
                     break
 
-                # Skip records that failed at generation stage (no LLM call needed)
+                # Records that failed during generation can be skipped immediately
+                # without an LLM call — the filter has nothing to check.
                 if record.get("status") != "success":
                     with stats_lock:
                         stats["skipped_status"] += 1
@@ -153,7 +156,8 @@ def main():
                     pbar.update(1)
                     continue
 
-                # Throttle submission to match the scheduler's thread budget
+                # Block submission until the active thread count drops below the
+                # scheduler's time-based cap.
                 while True:
                     allowed_threads = get_allowed_threads()
                     active_futures = [fut for fut in futures if not fut.done()]
@@ -162,7 +166,8 @@ def main():
                         break
                     time.sleep(0.1)
 
-                # Snapshot loop variable so each closure gets its own copy
+                # Capture the loop variable in a new scope so each closure
+                # references an independent snapshot rather than the shared variable.
                 snap_submitted = submitted_count
 
                 def make_callback(snap):
@@ -172,14 +177,14 @@ def main():
                             status = result.get("_filter_status", "failed")
 
                             if status == "kept":
-                                # Strip internal bookkeeping fields before saving
+                                # Remove internal bookkeeping fields before persisting.
                                 filtered_out = result.pop("_filtered_out_negatives", [])
                                 result.pop("_filter_status", None)
 
-                                # Write record immediately to the output JSONL
+                                # Append the accepted record to the output chunk.
                                 append_line(result, out_file)
 
-                                # Log any negatives that were filtered out
+                                # Log negatives that were filtered out for analysis.
                                 for neg in filtered_out:
                                     append_line(neg, deleted_negatives_path)
 
@@ -187,7 +192,8 @@ def main():
                                     stats["kept"] += 1
 
                             elif status == "discarded":
-                                # Log the full discarded record (incl. checked_positives + reasoning)
+                                # Persist the full discarded record (including checked
+                                # positives and reasoning) for post-hoc analysis.
                                 result.pop("_filter_status", None)
                                 append_line(result, deleted_queries_path)
                                 with stats_lock:
@@ -241,7 +247,7 @@ def main():
             f"skipped (non-success): {stats['skipped_status']}"
         )
 
-        # Mark file as fully done if all input records were consumed
+        # Mark the file complete if all input records have been submitted.
         remaining = total_records - (offset + submitted_count)
         if remaining <= 0 or (args.limit is not None and submitted_count >= args.limit):
             if os.path.exists(offset_file):

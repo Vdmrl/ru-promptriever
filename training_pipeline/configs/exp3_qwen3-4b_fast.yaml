@@ -1,7 +1,7 @@
 # =============================================================================
-# Experiment 2: Optimized 4B config for fast training (~30-40h/epoch)
-# Config for full training on Vast.ai (2x RTX 5090)
-# Launch: torchrun --nproc_per_node=2 train.py --config configs/v0.2_optimized4b_2_5090.yaml
+# Experiment 3: Qwen3-4B fast training schedule, attention-only LoRA (v0.2).
+# Target hardware: 2× RTX 5090 on Vast.ai (~30–40 h/epoch).
+# Launch: torchrun --nproc_per_node=2 train.py --config configs/exp3_qwen3-4b_fast.yaml
 # =============================================================================
 
 # --- General Hub & Logging ---
@@ -16,6 +16,7 @@ attn_implementation: "sdpa"
 torch_dtype: "bfloat16"
 
 # --- LoRA Configuration ---
+# Attention-only targets (no MLP) keep adapter size small for faster iteration.
 lora_r: 32
 lora_alpha: 64
 lora_target_modules:
@@ -27,18 +28,18 @@ lora_target_modules:
 # --- Data ---
 train_data_path: "hf://datasets/Vladimirlv/ru-promptriever-dataset-v0.1/train.parquet"
 eval_data_path: "hf://datasets/Vladimirlv/ru-promptriever-dataset-v0.1/val.parquet"
-instruct_only: true                    # Keep only has_instruction=True rows (~500k instead of ~1M)
-num_negatives: 7                       # Total: 3 instruct-negatives + 4 hard-negatives
-num_instruct_negatives: 3              # Exactly 3 instruction_negative passages per query
+instruct_only: true              # Train on instruction-augmented rows only (~500 k vs ~1 M)
+num_negatives: 7                 # Total: 3 instruction negatives + 4 BM25 hard negatives
+num_instruct_negatives: 3        # Maximum instruction-negative passages per instructed query
 max_len_query: 304
 max_len_passage: 256
 
 # --- GradCache ---
-# With 7 negatives (8 passages per query), chunk size of 16 = 128 passages per chunk.
+# With 7 negatives (8 passages per query), chunk_size=16 → 128 passages per chunk.
 gc_chunk_size: 16
 
 # --- Training ---
-# Effective batch size = per_device × accum × num_gpus = 8 × 8 × 2 = 128
+# Effective batch size = per_device × accum_steps × num_gpus = 8 × 8 × 2 = 128.
 per_device_train_batch_size: 8
 gradient_accumulation_steps: 8
 
@@ -51,15 +52,15 @@ fp16: false
 bf16: true
 load_in_4bit: false
 evaluation_strategy: "no"
-# eval_steps: 500  # Disabled to prevent GradCache .backward() crash in Trainer's no_grad validation phase
+# eval_steps: 500  # Disabled: GradCache .backward() conflicts with Trainer's no-grad eval pass
 logging_steps: 10
 save_strategy: "steps"
 save_steps: 500
 push_to_hub: true
-gradient_checkpointing: true           # Re-enabled to save VRAM and fix CUDA OOM
+gradient_checkpointing: true     # Re-enabled after resolving the CUDA OOM issue
 dataloader_num_workers: 4
 temperature: 0.01
 
 # --- Logging Auth ---
 report_to: "wandb"
-wandb_key: null
+wandb_key: null                  # Set here or via the WANDB_API_KEY environment variable

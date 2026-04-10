@@ -1,0 +1,78 @@
+# =============================================================================
+# Experiment 2: Qwen3-8B optimized to match Promptriever Appendix B specs (v0.1).
+# Target hardware: 2× RTX 5090 on Vast.ai.
+# Launch: torchrun --nproc_per_node=2 train.py --config configs/exp2_qwen3-8b_optimized.yaml
+# =============================================================================
+
+# --- General Hub & Logging ---
+hub_model_id: "Vladimirlv/ru-promptriever-v0.1-optimized"
+wandb_project: "ru-promptriever"
+run_name: "exp1_v0.1_optimized"
+output_dir: "./output_exp1_v0.1_optimized"
+
+# --- Model ---
+model_name_or_path: "Qwen/Qwen3-8B"
+attn_implementation: "sdpa"
+torch_dtype: "bfloat16"
+
+# --- LoRA Configuration ---
+lora_r: 32
+lora_alpha: 64      # α = 2r keeps the effective learning rate stable across ranks
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# --- Data ---
+train_data_path: "hf://datasets/Vladimirlv/ru-promptriever-dataset-v0.1/train.parquet"
+eval_data_path: "hf://datasets/Vladimirlv/ru-promptriever-dataset-v0.1/val.parquet"
+
+# Matches the Promptriever paper, Appendix B: "a train group size of 16"
+# (1 positive + 15 negatives per query).
+num_negatives: 15
+max_len_query: 304
+max_len_passage: 256
+
+# --- GradCache ---
+# gc_chunk_size: number of queries (and their passages) in a single mini-forward.
+# Affects VRAM usage only — has no effect on model quality or effective batch size.
+# With 15 negatives (16 passages per query), chunk_size=4 → 64 passages in VRAM.
+# chunk_size=8 causes OOM on 32 GB; 4 is the proven safe limit.
+gc_chunk_size: 4
+
+# --- Training ---
+# Matches the Promptriever paper, Appendix B:
+# "effective batch size of 128 (4 GPUs, 8 per device, 4 accumulation steps)".
+# With 2 GPUs: 8 per_device × 8 accum × 2 GPUs = 128.
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 8
+
+# Qwen3-8B has 36 transformer layers. Freezing the bottom 20 reduces backward-pass
+# compute significantly while preserving the model's representation capacity.
+# Set to 0 or remove this key to disable layer freezing.
+freeze_bottom_layers: 20
+tf32: true            # TF32 provides additional throughput on Ampere/Blackwell GPUs
+num_train_epochs: 1
+max_steps: -1         # -1 = run for the full epoch
+learning_rate: 1.0e-4
+warmup_steps: 100
+fp16: false
+bf16: true
+load_in_4bit: false   # Disable 4-bit QLoRA; use full bfloat16 LoRA for maximum speed
+evaluation_strategy: "steps"
+eval_steps: 500
+logging_steps: 1
+save_strategy: "steps"
+save_steps: 500
+push_to_hub: true
+gradient_checkpointing: true
+dataloader_num_workers: 4
+temperature: 0.01
+
+# --- Logging Auth ---
+report_to: "wandb"
+wandb_key: null       # Set here or via the WANDB_API_KEY environment variable

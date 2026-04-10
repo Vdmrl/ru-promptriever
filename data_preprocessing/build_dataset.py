@@ -10,11 +10,13 @@ import pyarrow.parquet as pq
 from tqdm import tqdm
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Explicit PyArrow schema — required for HF Dataset Viewer (avoids
-# ArrowNotImplementedError: Nested data conversions not implemented for
-# chunked array outputs)
-# ─────────────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Explicit PyArrow schema
+# ---------------------------------------------------------------------------
+# Defining the schema up front prevents ArrowNotImplementedError on nested
+# list<struct> columns when consuming the files via the HuggingFace Dataset
+# Viewer (which requires typed columns for streaming).
+# ---------------------------------------------------------------------------
 _PASSAGE_TYPE = pa.list_(
     pa.struct([
         ("docid", pa.string()),
@@ -99,7 +101,7 @@ def _df_to_arrow(df: pd.DataFrame) -> pa.Table:
     return pa.table(arrays, schema=_TRAIN_SCHEMA)
 
 
-# Add the current directory (data_preprocessing) to sys.path
+# Ensure the data_preprocessing package root is importable from this script.
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from utils.io import read_jsonl, get_jsonl_files  # noqa: E402
@@ -111,7 +113,8 @@ def normalize_raw_record(record):
     idata = record["instruction_data"]
     mdata = record["mining_data"]
 
-    # Collect all instruction negatives (matches_both == False)
+    # Collect instruction-negative passages (documents that matched the base
+    # query but did NOT satisfy the instruction constraint).
     valid_negs = []
     for idx, doc in enumerate(mdata.get("documents", [])):
         if not doc.get("matches_both", False):
@@ -162,7 +165,7 @@ def collect_split_doc_pool(records):
                         "text": item["text"],
                         "title": item.get("title", ""),
                     }
-        # Also add final_positive and synthetic negatives to the pool
+        # Include synthetically generated documents in the pool as well.
         fp = record.get("final_positive")
         if fp and fp.get("text"):
             fp_id = str(fp["id"])
@@ -193,10 +196,10 @@ def build_eval_rows(records, doc_pool, rng):
         instruct = record["instruction"]
         is_repeated = record.get("is_repeated", False)
 
-        # Mix 50/50
+        # Randomly pick either the original query or its rewritten variant (50/50).
         chosen_q = orig_q if rng.random() < 0.5 else rewr_q
 
-        # Standard query row (without instruction)
+        # --- Standard (non-instructed) query row ---
         std_pos_id = str(record["rewritten_original_positive"]["id"])
         std_pos_doc = doc_pool.get(std_pos_id) or {
             "docid": std_pos_id,
@@ -218,7 +221,7 @@ def build_eval_rows(records, doc_pool, rng):
             }
         )
 
-        # Instruct query row
+        # --- Instruction-augmented query row ---
         inst_pos_info = record["final_positive"]
         inst_pos_doc = {
             "docid": str(inst_pos_info["id"]),
@@ -242,7 +245,7 @@ def build_eval_rows(records, doc_pool, rng):
                 "query_id": f"{q_id}-instruct",
                 "query": f"{chosen_q} {instruct}".strip(),
                 "positive_passages": [inst_pos_doc],
-                "negative_passages": [],  # ONLY hard negatives go here (eval has none)
+                "negative_passages": [],  # Hard negatives are omitted for eval splits.
                 "only_instruction": instruct,
                 "only_query": chosen_q,
                 "has_instruction": True,
@@ -264,10 +267,10 @@ def build_train_rows(records, doc_registry, std_negs_batch, inst_negs_batch, rng
         instruct = record["instruction"]
         is_repeated = record.get("is_repeated", False)
 
-        # Mix 50/50
+        # Randomly pick original or rewritten query (50/50 blend).
         chosen_q = orig_q if rng.random() < 0.5 else rewr_q
 
-        # Standard query row (without instruction)
+        # --- Standard (non-instructed) query row ---
         std_pos_id = str(record["rewritten_original_positive"]["id"])
         std_pos_doc = doc_registry.get(std_pos_id) or {
             "docid": std_pos_id,
@@ -296,7 +299,7 @@ def build_train_rows(records, doc_registry, std_negs_batch, inst_negs_batch, rng
             }
         )
 
-        # Instruct query row
+        # --- Instruction-augmented query row ---
         inst_pos_info = record["final_positive"]
         inst_pos_doc = {
             "docid": str(inst_pos_info["id"]),
@@ -314,7 +317,8 @@ def build_train_rows(records, doc_registry, std_negs_batch, inst_negs_batch, rng
                 "title": sn.get("title", ""),
                 "explanation": "instruction_negative",
             }
-            # We NO LONGER add instruction negatives to inst_neg_docs (negative_passages)
+            # Instruction negatives are tracked separately in `new_negatives`
+            # and are intentionally excluded from `negative_passages` (BM25 hard negs).
             valid_synt_negs.append(entry)
 
         for cand in inst_negs_batch[idx]:
@@ -364,7 +368,8 @@ def save_sharded_parquet(df, output_dir, split_name, chunk_size=150000):
         shard_name = f"{split_name}-{i:05d}-of-{num_shards:05d}.parquet"
         shard_path = os.path.join(split_dir, shard_name)
 
-        # Convert to typed Arrow table and write with parquet 2.6 + snappy
+        # Serialize to a typed Arrow table to ensure compatibility with the
+        # HuggingFace Dataset Viewer and avoid ArrowNotImplementedError.
         arrow_table = _df_to_arrow(shard_df)
         pq.write_table(
             arrow_table,
@@ -464,9 +469,9 @@ def main():
     
     print(f"Discovered {len(all_input_files)} total .jsonl files. Using {len(input_files)} valid data chunks.")
 
-    # ========================
+    # ===========================================================
     # Stage 1: Read all records
-    # ========================
+    # ===========================================================
     print("Reading all records...")
     all_records = []
     skipped = 0
@@ -485,9 +490,13 @@ def main():
             f"Raw mode: kept {len(all_records)} records, skipped {skipped} (non-success)"
         )
 
-    # ========================
-    # Stage 2: Group and Split by query_id
-    # ========================
+    # ===========================================================
+    # Stage 2: Group by query_id and assign is_repeated flags
+    # ===========================================================
+    # When the same query_id appears in multiple JSONL chunks (e.g.
+    # due to re-runs), only one record is selected as canonical;
+    # the rest are tagged is_repeated=True and excluded from training
+    # unless --use_repeated is passed.
     print("Grouping and assigning is_repeated flags...")
     
     qid_to_records = {}
@@ -505,7 +514,8 @@ def main():
     test_qids = set(unique_qids_list[args.val_size : args.val_size + args.test_size])
     train_qids = set(unique_qids_list[args.val_size + args.test_size :])
 
-    # Assign is_repeated
+    # Among records sharing the same query_id, designate one as canonical
+    # (is_repeated=False) chosen at random; mark all others as repeated.
     for qid, recs in qid_to_records.items():
         chosen_idx = rng.randrange(len(recs))
         for i, r in enumerate(recs):
@@ -520,9 +530,9 @@ def main():
     print(f"  Val records:   {len(val_records)} ({len(val_qids)} distinct query_ids)")
     print(f"  Test records:  {len(test_records)} ({len(test_qids)} distinct query_ids)")
 
-    # ========================
-    # Stage 3: Build val/test (no BM25)
-    # ========================
+    # ===========================================================
+    # Stage 3: Build val/test splits (no BM25 hard negatives)
+    # ===========================================================
     print("\nBuilding val/test splits...")
 
     val_doc_pool = collect_split_doc_pool(val_records)
@@ -537,12 +547,12 @@ def main():
     val_df = pd.DataFrame(val_rows)
     test_df = pd.DataFrame(test_rows)
 
-    # ========================
-    # Stage 4: Build train (with BM25)
-    # ========================
+    # ===========================================================
+    # Stage 4: Build train split with BM25 hard negatives
+    # ===========================================================
     print("\nBuilding train split with BM25 negatives...")
 
-    # Build doc registry from train records only
+    # Index only documents that appear in training records.
     doc_registry = {}
     for record in train_records:
         for key in ["rewritten_original_positive", "rewritten_original_negative"]:
@@ -578,9 +588,9 @@ def main():
 
     train_df = pd.DataFrame(train_rows)
 
-    # ========================
-    # Stage 5: Sharding & export
-    # ========================
+    # ===========================================================
+    # Stage 5: Sharding and export
+    # ===========================================================
     print("\\nSaving datasets...")
     
     print("  -> Exporting Final Dataset")
@@ -589,7 +599,7 @@ def main():
     save_sharded_parquet(test_df, args.output_dir, "test", args.chunk_size)
     write_hf_repo_files(args.output_dir)
 
-    # Save document pools as separate parquet files (useful for indexing)
+    # Export per-split document pools as flat Parquet files for offline indexing.
     print("  -> Exporting Document Pools")
     pd.DataFrame(list(val_doc_pool.values())).to_parquet(
         os.path.join(args.output_dir, "val_corpus.parquet"), engine="pyarrow"

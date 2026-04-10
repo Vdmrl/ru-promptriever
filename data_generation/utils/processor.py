@@ -24,8 +24,12 @@ class Processor:
         self._thread_local = threading.local()
 
     def _get_llm(self):
+        """Return the LLM instance for the current thread, creating it if necessary.
+
+        Each thread maintains its own LLM connection to avoid shared-state issues
+        with the underlying HTTP client.
+        """
         if not hasattr(self._thread_local, "llm"):
-            # Initialize once per thread. Temperature is now loaded from config.
             self._thread_local.llm = create_llm_instance(
                 config_path=self.config_path
             )
@@ -40,7 +44,7 @@ class Processor:
     def _generate_instruction(self, llm, query, pos_doc, neg_doc, pos_id, neg_id):
         params = get_random_generation_params()
 
-        # No manual formatting here, inputs map directly to prompt placeholders
+        # Inputs map directly to prompt placeholders; no manual string formatting required.
         prompt = ChatPromptTemplate.from_messages([
             ("system", SYSTEM_PROMPT),
             ("human", INSTRUCTION_GENERATION_PROMPT)
@@ -94,10 +98,10 @@ class Processor:
         }
 
         try:
-            # Rewrite docs & Generate instruction
+            # Step 1: Rewrite documents and generate the retrieval instruction.
             instruct_out = self._generate_instruction(llm, q_text, p_text, n_text, pid, nid)
 
-            # Mining using the CLEAN rewritten query from Step 1
+            # Step 2: Mine instruction negatives using the rewritten query from Step 1.
             mining_out = self._generate_negatives(
                 llm,
                 instruct_out.rewritten_query,
@@ -110,7 +114,8 @@ class Processor:
             result["generated_instruction_text"] = instruct_out.instruction
 
         except Exception as e:
-            # If socket dies, clear it so next retry makes a new one
+            # On connection failure, discard the cached LLM so a fresh connection
+            # is attempted on the next call.
             err_str = str(e)
             if "Connection" in err_str or "Errno" in err_str:
                 if hasattr(self._thread_local, "llm"):
