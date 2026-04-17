@@ -80,6 +80,7 @@ The pipeline mirrors the two-stage process from Weller et al. (2024) with adapta
 ### Source Data
 
 Triples are sourced from two complementary datasets:
+
 - **mMARCO-RU** ([unicamp-dl/mmarco](https://huggingface.co/datasets/unicamp-dl/mmarco)) — Russian split of MS MARCO passage ranking.
 - **Tevatron MS MARCO aug** ([Tevatron/msmarco-passage-aug](https://huggingface.co/datasets/Tevatron/msmarco-passage-aug)) — the hard-negative augmented version used by RepLLaMA, used to supplement missing triples from the mMARCO split.
 
@@ -134,6 +135,7 @@ huggingface-cli upload Vladimirlv/ru-promptriever-dataset \
 ```
 
 **Filtering semantics:**
+
 - A record is **kept** if: (a) the original positive is judged relevant to `(query + instruction)` by the LLM, **or** (b) the backup generated positive passes the same check.
 - Instruction-negative candidates that are judged relevant to the instruction are discarded.
 - Discarded records are logged to `deleted_queries.jsonl` / `deleted_negatives.jsonl` for post-hoc analysis.
@@ -149,6 +151,10 @@ Fine-tuning uses **QLoRA** (4-bit NF4 quantization + LoRA rank-32) with **GradCa
 ```bash
 cd training_pipeline
 pip install -r requirements.txt
+
+# (Optional) Upgrade PyTorch to the latest CUDA 12.8 build if your driver requires it
+# pip uninstall torch torchvision torchaudio -y
+# pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 
 # Authenticate to Hugging Face (downloads Qwen3-4B and the dataset)
 huggingface-cli login
@@ -177,16 +183,16 @@ torchrun --nproc_per_node=2 train.py \
 
 **Key config parameters** (`configs/exp3_qwen3-4b_fast.yaml`):
 
-| Parameter | Value | Description |
-|---|---|---|
-| `model_name_or_path` | `Qwen/Qwen3-4B` | Base causal LM |
-| `lora_r` / `lora_alpha` | 32 / 64 | LoRA rank and scaling factor |
-| `num_negatives` | 7 | Hard negatives per query (3 instruction + 4 BM25) |
-| `gc_chunk_size` | 16 | GradCache sub-batch size |
-| `per_device_train_batch_size` | 8 | Physical batch size per GPU |
-| `gradient_accumulation_steps` | 8 | → Effective batch = 8 × 8 × 2 GPUs = 128 |
-| `temperature` | 0.01 | InfoNCE temperature |
-| `instruct_only` | `true` | Train only on instruction-augmented rows (~500 k) |
+| Parameter                       | Value             | Description                                       |
+| ------------------------------- | ----------------- | ------------------------------------------------- |
+| `model_name_or_path`          | `Qwen/Qwen3-4B` | Base causal LM                                    |
+| `lora_r` / `lora_alpha`     | 32 / 64           | LoRA rank and scaling factor                      |
+| `num_negatives`               | 7                 | Hard negatives per query (3 instruction + 4 BM25) |
+| `gc_chunk_size`               | 16                | GradCache sub-batch size                          |
+| `per_device_train_batch_size` | 8                 | Physical batch size per GPU                       |
+| `gradient_accumulation_steps` | 8                 | → Effective batch = 8 × 8 × 2 GPUs = 128       |
+| `temperature`                 | 0.01              | InfoNCE temperature                               |
+| `instruct_only`               | `true`          | Train only on instruction-augmented rows (~500 k) |
 
 Training checkpoints are automatically pushed to HuggingFace Hub every 500 steps. If interrupted, the script resumes from the latest local or remote checkpoint automatically.
 
@@ -210,30 +216,35 @@ python merge_lora.py \
 
 The evaluation pipeline benchmarks models across four task categories:
 
-| Task | Dataset key | Metric(s) | Description |
-|---|---|---|---|
-| **Synthetic test** | `synthetic_test` | nDCG@20, p-MRR | Test split of our dataset; paired standard + instructed queries |
-| **mFollowIR-RU** | `mfollowir_ru` | nDCG@20, p-MRR | Russian split of mFollowIR (Weller et al., 2025); TREC NeuCLIR narratives as instructions |
-| **ruMTEB Retrieval** | `rumteb_retrieval` | nDCG@10 | Standard Russian retrieval benchmarks (RuBQRetrieval, etc.) via MTEB |
-| **EN MTEB (sanity check)** | `en_mteb_retrieval` | nDCG@10 | SciFact + NFCorpus; verifies scores match the published Promptriever paper |
+| Task                             | Dataset key           | Metric(s)      | Description                                                                               |
+| -------------------------------- | --------------------- | -------------- | ----------------------------------------------------------------------------------------- |
+| **Synthetic test**         | `synthetic_test`    | nDCG@20, p-MRR | Test split of our dataset; paired standard + instructed queries                           |
+| **mFollowIR-RU**           | `mfollowir_ru`      | nDCG@20, p-MRR | Russian split of mFollowIR (Weller et al., 2025); TREC NeuCLIR narratives as instructions |
+| **ruMTEB Retrieval**       | `rumteb_retrieval`  | nDCG@10        | Standard Russian retrieval benchmarks (RuBQRetrieval, etc.) via MTEB                      |
+| **EN MTEB (sanity check)** | `en_mteb_retrieval` | nDCG@10        | SciFact + NFCorpus; verifies scores match the published Promptriever paper                |
 
 **p-MRR** (Pairwise Mean Reciprocal Rank) is the primary instruction-following metric: it measures how much a model adjusts rankings for documents whose relevance *changes* between the original and modified instructions. A score of 0 means the model ignores instructions; positive scores indicate correct ranking adjustments.
 
 ### Supported Model Types
 
-| Type key | Examples |
-|---|---|
-| `bm25` | Sparse baseline (bm25s + Snowball stemming) |
-| `encoder` | `intfloat/multilingual-e5-large`, `BAAI/bge-m3` |
-| `giga_embedding` | `ai-sage/Giga-Embeddings-instruct` |
-| `qwen3_embedding` | `Qwen/Qwen3-Embedding-4B` |
-| `causal_lm` | `samaya-ai/promptriever-llama3.1-8b-v1`, `Vladimirlv/ru-promptriever-qwen3-4b` |
+| Type key            | Examples                                                                           |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| `bm25`            | Sparse baseline (bm25s + Snowball stemming)                                        |
+| `encoder`         | `intfloat/multilingual-e5-large`, `BAAI/bge-m3`                                |
+| `giga_embedding`  | `ai-sage/Giga-Embeddings-instruct`                                               |
+| `qwen3_embedding` | `Qwen/Qwen3-Embedding-4B`                                                        |
+| `causal_lm`       | `samaya-ai/promptriever-llama3.1-8b-v1`, `Vladimirlv/ru-promptriever-qwen3-4b` |
 
 ### Quick Start
 
 ```bash
 cd evaluation_pipeline
 pip install -r requirements.txt
+
+# (Optional) Upgrade PyTorch to the latest CUDA 12.8 build if your driver requires it
+# pip uninstall torch torchvision torchaudio -y
+# pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+
 huggingface-cli login
 # If huggingface-cli is not in PATH, use the Python alternative:
 # python -c "from huggingface_hub import login; login()"
@@ -280,14 +291,14 @@ api.upload_folder(
 
 ## Datasets & Models
 
-| Artifact | Link |
-|---|---|
-| Training dataset v0.1 | [![HF](https://img.shields.io/badge/🤗-ru--promptriever--dataset--v0.1-blue)](https://huggingface.co/datasets/Vladimirlv/ru-promptriever-dataset-v0.1) |
-| Trained model (merged) | [![HF](https://img.shields.io/badge/🤗-ru--promptriever--qwen3--4b-yellow)](https://huggingface.co/Vladimirlv/ru-promptriever-qwen3-4b) |
-| Benchmark results | [![HF](https://img.shields.io/badge/🤗-benchmark--results-green)](https://huggingface.co/datasets/Vladimirlv/ru-promptriever-benchmark-results) |
-| mFollowIR (eval) | [![HF](https://img.shields.io/badge/🤗-mFollowIR-orange)](https://huggingface.co/datasets/jhu-clsp/mFollowIR) |
-| Source triples (RepLLaMA aug) | [![HF](https://img.shields.io/badge/🤗-msmarco--passage--aug-lightgrey)](https://huggingface.co/datasets/Tevatron/msmarco-passage-aug) |
-| Source mMARCO dataset | [![HF](https://img.shields.io/badge/🤗-mmarco-lightgrey)](https://huggingface.co/datasets/unicamp-dl/mmarco) |
+| Artifact                      | Link                                                                                                                                              |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Training dataset v0.1         | [![HF](https://img.shields.io/badge/🤗-ru--promptriever--dataset--v0.1-blue)](https://huggingface.co/datasets/Vladimirlv/ru-promptriever-dataset-v0.1) |
+| Trained model (merged)        | [![HF](https://img.shields.io/badge/🤗-ru--promptriever--qwen3--4b-yellow)](https://huggingface.co/Vladimirlv/ru-promptriever-qwen3-4b)                |
+| Benchmark results             | [![HF](https://img.shields.io/badge/🤗-benchmark--results-green)](https://huggingface.co/datasets/Vladimirlv/ru-promptriever-benchmark-results)        |
+| mFollowIR (eval)              | [![HF](https://img.shields.io/badge/🤗-mFollowIR-orange)](https://huggingface.co/datasets/jhu-clsp/mFollowIR)                                          |
+| Source triples (RepLLaMA aug) | [![HF](https://img.shields.io/badge/🤗-msmarco--passage--aug-lightgrey)](https://huggingface.co/datasets/Tevatron/msmarco-passage-aug)                 |
+| Source mMARCO dataset         | [![HF](https://img.shields.io/badge/🤗-mmarco-lightgrey)](https://huggingface.co/datasets/unicamp-dl/mmarco)                                           |
 
 ---
 
@@ -295,11 +306,11 @@ api.upload_folder(
 
 This repository uses a dual-license structure:
 
-| Component | License | Reason |
-|---|---|---|
-| **Source code** (`*.py`, `*.yaml`, `*.json`) | [MIT](LICENSE) | Original authorship, no third-party data restrictions |
-| **Trained model** ([Vladimirlv/ru-promptriever-qwen3-4b](https://huggingface.co/Vladimirlv/ru-promptriever-qwen3-4b)) | [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) | Derived from MS MARCO (Microsoft Research License — non-commercial) |
-| **Dataset** ([Vladimirlv/ru-promptriever-dataset](https://huggingface.co/datasets/Vladimirlv/ru-promptriever-dataset-v0.1)) | [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) | Contains synthetically transformed MS MARCO content |
+| Component                                                                                                                      | License                                                      | Reason                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | -------------------------------------------------------------------- |
+| **Source code** (`*.py`, `*.yaml`, `*.json`)                                                                       | [MIT](LICENSE)                                                  | Original authorship, no third-party data restrictions                |
+| **Trained model** ([Vladimirlv/ru-promptriever-qwen3-4b](https://huggingface.co/Vladimirlv/ru-promptriever-qwen3-4b))       | [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) | Derived from MS MARCO (Microsoft Research License — non-commercial) |
+| **Dataset** ([Vladimirlv/ru-promptriever-dataset](https://huggingface.co/datasets/Vladimirlv/ru-promptriever-dataset-v0.1)) | [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) | Contains synthetically transformed MS MARCO content                  |
 
 The non-commercial restriction on the model and dataset originates from the upstream [MS MARCO license](https://microsoft.github.io/msmarco/) and cannot be lifted by downstream authors. The source code itself is freely usable under MIT.
 
