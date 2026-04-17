@@ -152,6 +152,8 @@ pip install -r requirements.txt
 
 # Authenticate to Hugging Face (downloads Qwen3-4B and the dataset)
 huggingface-cli login
+# If huggingface-cli is not in PATH, use the Python alternative:
+# python -c "from huggingface_hub import login; login()"
 
 # (Optional) Set WandB API key
 export WANDB_API_KEY="your_key_here"
@@ -233,6 +235,8 @@ The evaluation pipeline benchmarks models across four task categories:
 cd evaluation_pipeline
 pip install -r requirements.txt
 huggingface-cli login
+# If huggingface-cli is not in PATH, use the Python alternative:
+# python -c "from huggingface_hub import login; login()"
 ```
 
 ```bash
