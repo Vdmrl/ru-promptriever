@@ -1,0 +1,93 @@
+# =============================================================================
+# Experiment 5: Continue training ru-Promptriever on mixed real + synthetic data.
+# Goal: Improve standard nDCG while preserving instruction-following (p-MRR).
+#
+# Data: ~11k MIRACL+MrTyDi (real) + ~11k synthetic instructed + ~6k synthetic standard
+# Total: ~28k rows, 2 epochs
+#
+# Key differences from exp4:
+#   - Much smaller dataset → 2 epochs instead of 1
+#   - Lower learning rate (5e-5) to avoid catastrophic forgetting
+#   - Resume from merged best checkpoint of exp4
+#   - Fewer negatives available from real data (MIRACL/MrTyDi have ~7-10 negatives)
+#
+# Launch: torchrun --nproc_per_node=4 train.py --config configs/exp5_continue_training.yaml
+# =============================================================================
+
+# --- General Hub & Logging ---
+hub_model_id: "Vladimirlv/ru-promptriever-qwen3-4b-v2"
+wandb_project: "ru-promptriever"
+run_name: "experiment_5_continue_training"
+output_dir: "./output_ru-promptriever-continue"
+
+# --- Model ---
+# IMPORTANT: Point this to the MERGED checkpoint from exp4 (after merge_lora.py).
+# If using HF: "Vladimirlv/ru-promptriever-qwen3-4b"
+# If local: path to merged model directory
+model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b"
+attn_implementation: "sdpa"
+torch_dtype: "bfloat16"
+
+# --- LoRA Configuration ---
+# Same targets as exp4 — all 7 linear layer types
+lora_r: 32
+lora_alpha: 64
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# --- Data ---
+# Path to the mixed dataset built by build_continue_training_dataset.py
+# Option A: local path to the parquet file
+# train_data_path: "./continue_training_dataset/data/train-00000-of-00001.parquet"
+# Option B: HF repo (if uploaded)
+train_data_path: "Vladimirlv/ru-promptriever-continue-dataset"
+eval_data_path: "Vladimirlv/ru-promptriever-dataset"
+train_split: "train"
+eval_split: "validation"
+instruct_only: false
+# Real data has fewer negatives than synthetic — reduce to avoid empty padding
+num_negatives: 10
+num_instruct_negatives: 3
+max_len_query: 512
+max_len_passage: 256
+
+# --- GradCache ---
+gc_chunk_size: 2
+
+# --- Training ---
+# Effective batch size = 8 × 4 × 4 = 128 (same as exp4).
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 4
+
+tf32: true
+num_train_epochs: 2              # 2 epochs because dataset is small (~28k rows)
+max_steps: -1
+learning_rate: 5.0e-5            # LOWER lr to avoid killing instruction-following
+warmup_steps: 50                 # Fewer warmup steps (shorter training)
+fp16: false
+bf16: true
+load_in_4bit: false
+
+# --- Evaluation ---
+evaluation_strategy: "steps"
+eval_steps: 500
+per_device_eval_batch_size: 2
+
+logging_steps: 10
+save_strategy: "steps"
+save_steps: 100
+save_total_limit: 5              # Keep more checkpoints to pick the best
+push_to_hub: true
+gradient_checkpointing: true
+dataloader_num_workers: 4
+temperature: 0.01
+
+# --- Logging Auth ---
+report_to: "wandb"
+wandb_key: null                  # Set here or via the WANDB_API_KEY environment variable

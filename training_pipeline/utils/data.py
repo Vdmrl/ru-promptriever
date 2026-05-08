@@ -68,7 +68,7 @@ class RetrieverDataset(Dataset):
 
     @staticmethod
     def _load_data(data_path: str, split: str = "train"):
-        """Load dataset from HF repo ID, hf:// URI, or local file path."""
+        """Load dataset from HF repo ID, hf:// URI, local file, or local directory."""
         # 1. Direct HF repo ID (e.g. "Vladimirlv/ru-promptriever-dataset")
         if (
             "/" in data_path
@@ -98,7 +98,28 @@ class RetrieverDataset(Dataset):
             print(f"[data] Cached at: {local_path}")
             data_path = local_path
 
-        # 3. Local file path
+        # 3. Local directory containing parquet files (e.g. from build_continue_training_dataset.py)
+        if os.path.isdir(data_path):
+            import glob
+            # Look for parquet files in data/ subdirectory first, then root
+            data_subdir = os.path.join(data_path, "data")
+            if os.path.isdir(data_subdir):
+                parquet_files = sorted(glob.glob(os.path.join(data_subdir, f"{split}-*.parquet")))
+                if not parquet_files:
+                    # Fall back to any parquet files in data/
+                    parquet_files = sorted(glob.glob(os.path.join(data_subdir, "*.parquet")))
+            else:
+                parquet_files = sorted(glob.glob(os.path.join(data_path, "*.parquet")))
+            if not parquet_files:
+                raise FileNotFoundError(
+                    f"No parquet files found in directory: {data_path}"
+                )
+            print(f"[data] Loading {len(parquet_files)} parquet file(s) from {data_path}")
+            return load_dataset(
+                "parquet", data_files={"train": parquet_files}, split="train", num_proc=8
+            )
+
+        # 4. Local file path
         return load_dataset(
             "parquet", data_files={"train": data_path}, split="train", num_proc=8
         )
