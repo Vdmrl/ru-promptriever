@@ -120,7 +120,8 @@ def load_miracl_russian() -> list[dict]:
 
     for split in ["train", "dev"]:
         print(f"  Loading MIRACL Russian {split}...")
-        ds = load_dataset("miracl/miracl", "ru", split=split, trust_remote_code=True)
+        ds = load_dataset("miracl/miracl", "ru", split=split, trust_remote_code=True,
+                         token=os.environ.get("HF_TOKEN"))
 
         for item in tqdm(ds, desc=f"  MIRACL {split}"):
             query = item["query"]
@@ -159,7 +160,8 @@ def load_mrtydi_russian() -> list[dict]:
     rows = []
 
     print("  Loading Mr. TyDi Russian train...")
-    ds = load_dataset("castorini/mr-tydi", "russian", split="train")
+    ds = load_dataset("castorini/mr-tydi", "russian", split="train",
+                      token=os.environ.get("HF_TOKEN"))
 
     for item in tqdm(ds, desc="  Mr. TyDi train"):
         query = item["query"]
@@ -205,7 +207,8 @@ def load_synthetic_subset(
     rng = random.Random(seed)
 
     print(f"  Loading synthetic dataset (target: {num_instructed} instructed + {num_standard} standard, from_end={from_end})...")
-    ds = load_dataset("Vladimirlv/ru-promptriever-dataset", split="train", num_proc=8)
+    ds = load_dataset("Vladimirlv/ru-promptriever-dataset", split="train", num_proc=8,
+                      token=os.environ.get("HF_TOKEN"))
 
     # Separate instructed and standard rows
     instructed_indices = []
