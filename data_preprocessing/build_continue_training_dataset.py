@@ -194,12 +194,17 @@ def load_synthetic_subset(
     num_instructed: int,
     num_standard: int,
     seed: int = 42,
+    from_end: bool = False,
 ) -> list[dict]:
-    """Load a random subset of the existing ru-promptriever synthetic dataset."""
+    """Load a random subset of the existing ru-promptriever synthetic dataset.
+    
+    If from_end=True, takes the LAST N items after shuffle instead of the first N.
+    Useful to get a different subset from a previous run that used from_end=False.
+    """
     rows = []
     rng = random.Random(seed)
 
-    print(f"  Loading synthetic dataset (target: {num_instructed} instructed + {num_standard} standard)...")
+    print(f"  Loading synthetic dataset (target: {num_instructed} instructed + {num_standard} standard, from_end={from_end})...")
     ds = load_dataset("Vladimirlv/ru-promptriever-dataset", split="train", num_proc=8)
 
     # Separate instructed and standard rows
@@ -217,8 +222,12 @@ def load_synthetic_subset(
     rng.shuffle(instructed_indices)
     rng.shuffle(standard_indices)
 
-    selected_instructed = instructed_indices[:num_instructed]
-    selected_standard = standard_indices[:num_standard]
+    if from_end:
+        selected_instructed = instructed_indices[-num_instructed:]
+        selected_standard = standard_indices[-num_standard:]
+    else:
+        selected_instructed = instructed_indices[:num_instructed]
+        selected_standard = standard_indices[:num_standard]
 
     print(f"    Selected: {len(selected_instructed)} instructed, {len(selected_standard)} standard")
 
@@ -292,6 +301,9 @@ def main():
                         help="Number of synthetic standard rows to include (default: 6000)")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed (default: 42)")
+    parser.add_argument("--from_end", action="store_true",
+                        help="Take synthetic queries from the END of shuffled list instead of start. "
+                             "Use this to get a different subset from a previous run with same seed.")
     parser.add_argument("--push_to_hub", type=str, default=None,
                         help="Optional HuggingFace repo ID to upload the dataset")
     args = parser.parse_args()
@@ -317,6 +329,7 @@ def main():
         num_instructed=args.num_synthetic_instructed,
         num_standard=args.num_synthetic_standard,
         seed=args.seed,
+        from_end=args.from_end,
     )
 
     # ==============================
