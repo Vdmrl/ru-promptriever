@@ -44,9 +44,9 @@ lora_target_modules:
 # --- Data ---
 # Path to the mixed dataset built by build_continue_training_dataset.py
 # Option A: local path to the parquet file
-# train_data_path: "./continue_training_dataset/data/train-00000-of-00001.parquet"
+# train_data_path: "./continue_training_dataset"
 # Option B: HF repo (if uploaded)
-train_data_path: "Vladimirlv/ru-promptriever-continue-dataset"
+train_data_path: "./continue_training_dataset"
 eval_data_path: "Vladimirlv/ru-promptriever-dataset"
 train_split: "train"
 eval_split: "validation"
