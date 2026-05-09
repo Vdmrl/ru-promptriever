@@ -81,7 +81,7 @@ per_device_eval_batch_size: 2
 
 logging_steps: 10
 save_strategy: "steps"
-save_steps: 100
+save_steps: 20
 save_total_limit: 5              # Keep more checkpoints to pick the best
 push_to_hub: true
 gradient_checkpointing: true
