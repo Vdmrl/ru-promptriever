@@ -82,5 +82,5 @@ dataloader_num_workers: 4
 temperature: 0.01
 
 # --- Logging Auth ---
-report_to: "wandb"
+report_to: "none"
 wandb_key: null
