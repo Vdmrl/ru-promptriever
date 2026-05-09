@@ -124,11 +124,22 @@ def build_model(cfg: dict):
 
 def build_tokenizer(cfg: dict):
     """Load tokenizer and configure pad_token for decoder-only models."""
-    tokenizer = AutoTokenizer.from_pretrained(
-        cfg["model_name_or_path"],
-        trust_remote_code=True,
-        use_fast=False,
-    )
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(
+            cfg["model_name_or_path"],
+            trust_remote_code=True,
+            use_fast=False,
+        )
+    except Exception as e:
+        print(f"Failed to load tokenizer from {cfg['model_name_or_path']}: {e}")
+        print("Attempting to load from base model instead (assuming path is an adapter)...")
+        from peft import PeftConfig
+        peft_config = PeftConfig.from_pretrained(cfg["model_name_or_path"])
+        tokenizer = AutoTokenizer.from_pretrained(
+            peft_config.base_model_name_or_path,
+            trust_remote_code=True,
+            use_fast=False,
+        )
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
