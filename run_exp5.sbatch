@@ -8,8 +8,6 @@
 #SBATCH --gpus=4
 #SBATCH --cpus-per-task=16
 
-# Инициализируем окружение модулей (на всякий случай, чтобы точно работало)
-source /etc/profile.d/modules.sh 2>/dev/null || true
 
 module load Python/PyTorch_GPU_v2.4
 export WANDB_MODE=disabled
