@@ -709,6 +709,12 @@ def main():
         help="Skip model-dataset pairs that already have results.",
     )
     parser.add_argument(
+        "--device",
+        type=str,
+        default=None,
+        help="Override device (e.g. cpu or cuda:0)",
+    )
+    parser.add_argument(
         "--hf-repo",
         type=str,
         default=None,
@@ -718,6 +724,8 @@ def main():
     args = parser.parse_args()
 
     config = load_config(args.config)
+    if args.device:
+        config["device"] = args.device
     output_dir = config.get("output_dir", "./results")
     generic_instruction = config.get(
         "generic_instruction", "Найди релевантный документ."
