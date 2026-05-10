@@ -71,6 +71,20 @@ def upload_to_huggingface(output_dir: str, repo_id: str):
 # ---------------------------------------------------------------------------
 
 
+def resolve_latest_checkpoint(path: str) -> str:
+    """If path is a directory containing checkpoint-XXX, return the latest one."""
+    if os.path.isdir(path):
+        import glob
+        checkpoints = glob.glob(os.path.join(path, "checkpoint-*"))
+        if checkpoints:
+            # Sort by step number
+            checkpoints.sort(key=lambda x: int(x.split("-")[-1]))
+            latest = checkpoints[-1]
+            logger.info(f"Auto-resolved path {path} to latest checkpoint: {latest}")
+            return latest
+    return path
+
+
 def load_model(model_cfg: dict, global_cfg: dict):
     """Instantiate a model wrapper based on config type."""
     model_type = model_cfg["type"]
@@ -79,13 +93,16 @@ def load_model(model_cfg: dict, global_cfg: dict):
     generic_instruction = global_cfg.get(
         "generic_instruction", "Найди релевантный документ."
     )
+    
+    # Resolve the path to the latest checkpoint if it's an output directory
+    resolved_path = resolve_latest_checkpoint(model_cfg.get("model_name_or_path", ""))
 
     if model_type == "bm25":
         return BM25Retriever()
 
     elif model_type == "encoder":
         return EncoderRetriever(
-            model_name_or_path=model_cfg["model_name_or_path"],
+            model_name_or_path=resolved_path,
             device=device,
             query_prefix=model_cfg.get("query_prefix", ""),
             passage_prefix=model_cfg.get("passage_prefix", ""),
@@ -94,7 +111,7 @@ def load_model(model_cfg: dict, global_cfg: dict):
 
     elif model_type == "causal_lm":
         return CausalLMRetriever(
-            model_name_or_path=model_cfg["model_name_or_path"],
+            model_name_or_path=resolved_path,
             device=device,
             dtype=dtype,
             max_length=model_cfg.get("max_length", 512),
@@ -105,14 +122,14 @@ def load_model(model_cfg: dict, global_cfg: dict):
 
     elif model_type == "qwen3_embedding":
         return Qwen3EmbeddingRetriever(
-            model_name_or_path=model_cfg["model_name_or_path"],
+            model_name_or_path=resolved_path,
             device=device,
             max_length=model_cfg.get("max_length", 8192),
         )
 
     elif model_type == "giga_embedding":
         return GigaEmbeddingRetriever(
-            model_name_or_path=model_cfg["model_name_or_path"],
+            model_name_or_path=resolved_path,
             device=device,
             query_prompt=model_cfg.get(
                 "query_prompt",

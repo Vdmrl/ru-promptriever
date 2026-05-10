@@ -65,6 +65,18 @@ models:
     max_length: 512
     query_prompt: "Instruct: Дан вопрос, необходимо найти абзац текста с ответом\nQuery: "
 
+  - name: "ru-promptriever-qwen3-4b-continues"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-qwen3-4b-continues"
+    batch_size: 4
+    max_length: 512
+
+  - name: "ru-promptriever-0.6b"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-qwen3-0.6b"
+    batch_size: 16
+    max_length: 512
+
 # --- Datasets ---
 datasets:
   - name: "synthetic_test"
