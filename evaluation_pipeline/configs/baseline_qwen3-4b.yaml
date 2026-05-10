@@ -79,7 +79,7 @@ models:
 
   - name: "ru-promptriever-qwen3-0.6b-1epoch"
     type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-qwen3-0.6b/checkpoint-330"
+    model_name_or_path: "./output_ru-promptriever-qwen3-0.6b/checkpoint-320"
     batch_size: 16
     max_length: 512
 
