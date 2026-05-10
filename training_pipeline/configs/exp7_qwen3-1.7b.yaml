@@ -1,0 +1,79 @@
+# =============================================================================
+# Experiment 7: Qwen3-1.7B — Mid-size model instruction-following experiment.
+# Goal: Test whether a mid-size (1.7B) model can learn instruction-aware retrieval
+# and compare it to 0.6B and 4B models.
+#
+# Data: ~20k synthetic instructed + ~10k synthetic standard + ~11k real (MIRACL+MrTyDi)
+# Total: ~42k rows.
+#
+# Launch: torchrun --nproc_per_node=4 train.py --config configs/exp7_qwen3-1.7b.yaml
+# =============================================================================
+
+# --- General Hub & Logging ---
+hub_model_id: "Vladimirlv/ru-promptriever-qwen3-1.7b"
+wandb_project: "ru-promptriever"
+run_name: "experiment_7_qwen3_1.7b"
+output_dir: "./output_ru-promptriever-qwen3-1.7b"
+
+# --- Model ---
+model_name_or_path: "Qwen/Qwen3-1.7B"
+attn_implementation: "sdpa"
+torch_dtype: "bfloat16"
+
+# --- LoRA Configuration ---
+lora_r: 32
+lora_alpha: 64
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# --- Data ---
+train_data_path: "./qwen06b_dataset" # Using the exact same dataset as 0.6b for a fair comparison
+eval_data_path: "Vladimirlv/ru-promptriever-dataset"
+train_split: "train"
+eval_split: "validation"
+instruct_only: false
+num_negatives: 10
+num_instruct_negatives: 3
+max_len_query: 512
+max_len_passage: 256
+
+# --- GradCache ---
+gc_chunk_size: 4
+
+# --- Training ---
+# Effective batch size = 16 * 2 * 4 = 128
+per_device_train_batch_size: 16
+gradient_accumulation_steps: 2
+
+tf32: true
+num_train_epochs: 2              # 2 epochs — dataset is small (~42k rows)
+max_steps: -1
+learning_rate: 1.0e-4
+warmup_steps: 100
+fp16: false
+bf16: true
+load_in_4bit: false
+
+# --- Evaluation ---
+evaluation_strategy: "steps"
+eval_steps: 500
+per_device_eval_batch_size: 4
+
+logging_steps: 10
+save_strategy: "steps"
+save_steps: 20
+save_total_limit: 3
+push_to_hub: true
+gradient_checkpointing: true
+dataloader_num_workers: 4
+temperature: 0.01
+
+# --- Logging Auth ---
+report_to: "none"
+wandb_key: null
