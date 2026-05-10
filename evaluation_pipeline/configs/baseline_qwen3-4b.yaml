@@ -67,7 +67,7 @@ models:
 
   - name: "ru-promptriever-qwen3-4b-continues"
     type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-qwen3-4b-continues"
+    model_name_or_path: "./output_ru-promptriever-continue"
     batch_size: 4
     max_length: 512
 
