@@ -98,25 +98,31 @@ def build_model(cfg: dict):
                 f"[OPTIMIZATION] Froze the bottom {frozen_count} transformer layers."
             )
 
-    peft_config = LoraConfig(
-        r=cfg.get("lora_r", 16),
-        lora_alpha=cfg.get("lora_alpha", 32),
-        target_modules=cfg.get(
-            "lora_target_modules",
-            [
-                "q_proj",
-                "k_proj",
-                "v_proj",
-                "o_proj",
-                "gate_proj",
-                "up_proj",
-                "down_proj",
-            ],
-        ),
-        bias="none",
-        task_type="CAUSAL_LM",
-    )
-    model = get_peft_model(model, peft_config)
+    if hasattr(model, "peft_config"):
+        print("[PEFT] Existing adapter detected! Enabling gradients for continue training...")
+        for name, param in model.named_parameters():
+            if "lora" in name.lower() or "modules_to_save" in name.lower():
+                param.requires_grad = True
+    else:
+        peft_config = LoraConfig(
+            r=cfg.get("lora_r", 16),
+            lora_alpha=cfg.get("lora_alpha", 32),
+            target_modules=cfg.get(
+                "lora_target_modules",
+                [
+                    "q_proj",
+                    "k_proj",
+                    "v_proj",
+                    "o_proj",
+                    "gate_proj",
+                    "up_proj",
+                    "down_proj",
+                ],
+            ),
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+        model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
 
     return model
