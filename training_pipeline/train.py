@@ -123,7 +123,12 @@ def build_model(cfg: dict):
             task_type="CAUSAL_LM",
         )
         model = get_peft_model(model, peft_config)
-    model.print_trainable_parameters()
+    if hasattr(model, "print_trainable_parameters"):
+        model.print_trainable_parameters()
+    else:
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        all_params = sum(p.numel() for p in model.parameters())
+        print(f"trainable params: {trainable_params:,} || all params: {all_params:,} || trainable%: {100 * trainable_params / all_params:.4f}")
 
     return model
 
