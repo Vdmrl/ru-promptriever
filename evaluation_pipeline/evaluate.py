@@ -113,6 +113,7 @@ def load_model(model_cfg: dict, global_cfg: dict):
         return CausalLMRetriever(
             model_name_or_path=resolved_path,
             device=device,
+            revision=model_cfg.get("revision")
             dtype=dtype,
             max_length=model_cfg.get("max_length", 512),
             generic_instruction=generic_instruction,

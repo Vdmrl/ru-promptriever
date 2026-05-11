@@ -195,8 +195,9 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
                 peft.peft_model.get_balanced_memory = patched_get_balanced_memory
 
             try:
+                revision = kwargs.pop("revision", None)
                 self.model = PeftModel.from_pretrained(
-                    base_model, model_name_or_path, config=peft_config
+                    base_model, model_name_or_path, config=peft_config, revision=revision
                 )
             finally:
                 accelerate.utils.modeling.get_balanced_memory = orig_accel_get_balanced_memory
@@ -206,14 +207,16 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
             self.model = self.model.merge_and_unload()
             self.model.eval()
         else:
+            revision = kwargs.pop("revision", None)
             self.tokenizer = AutoTokenizer.from_pretrained(
-                model_name_or_path, trust_remote_code=True
+                model_name_or_path, trust_remote_code=True, revision=revision
             )
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name_or_path,
                 torch_dtype=torch_dtype,
                 device_map="auto",
                 trust_remote_code=True,
+                revision=revision
             )
             self.model.eval()
 

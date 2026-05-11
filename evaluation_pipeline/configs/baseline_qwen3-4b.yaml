@@ -91,7 +91,8 @@ models:
 
   - name: "ru-promptriever-qwen3-1.7b-1epoch"
     type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-qwen3-1.7b/checkpoint-320"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-1.7b"
+    revision: "ВСТАВЬ_СЮДА_ХЭШ_КОММИТА_ИЗ_HUGGINGFACE"
     batch_size: 16
     max_length: 512
 
