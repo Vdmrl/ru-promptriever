@@ -2,12 +2,12 @@
 # Experiment 8: Gold Mix — Final balanced multilingual training.
 # Goal: Maximize both standard nDCG and instruction-following (p-MRR) on RU+EN.
 #
-# Data: 80k rows total
-#   - 16k Russian real (MIRACL + MrTyDi + XOR-TyDi + RuBQ)
-#   - 26k Russian synthetic (instructed)
-#   - 10k Russian synthetic (standard)
-#   - 20k English synthetic (instructed, from original Promptriever/FollowIR)
-#   -  8k English synthetic (standard)
+# Data: ~65k rows total
+#   - ~11k Russian real (MIRACL + MrTyDi, all available)
+#   - 22k Russian synthetic (instructed)
+#   -  8k Russian synthetic (standard)
+#   - 17k English synthetic (instructed, from original Promptriever/FollowIR)
+#   -  7k English synthetic (standard)
 #
 # Key design:
 #   - 1 epoch (80k is large enough)

@@ -1,14 +1,14 @@
 """
 Build the "Gold Mix" dataset for Experiment 8.
 
-Target composition (~75,000 examples):
+Target composition (~65,000 examples):
   1. ~11k Russian Real queries       — MIRACL ru (train+dev) + MrTyDi ru (train), ALL available
-  2.  26k Russian Synthetic w/ instr — from Vladimirlv/ru-promptriever-dataset
-  3.  10k Russian Synthetic w/o instr— from Vladimirlv/ru-promptriever-dataset
-  4.  20k English Synthetic w/ instr — from samaya-ai/msmarco-w-instructions
-  5.   8k English Synthetic w/o instr— from samaya-ai/msmarco-w-instructions
+  2.  22k Russian Synthetic w/ instr — from Vladimirlv/ru-promptriever-dataset
+  3.   8k Russian Synthetic w/o instr— from Vladimirlv/ru-promptriever-dataset
+  4.  17k English Synthetic w/ instr — from samaya-ai/msmarco-w-instructions
+  5.   7k English Synthetic w/o instr— from samaya-ai/msmarco-w-instructions
                                        ──────
-                              Total ≈ 75k (exact count depends on MIRACL+MrTyDi availability)
+                              Total ≈ 65k (exact count depends on MIRACL+MrTyDi availability)
 
 Note: XOR-TyDi and RuBQ were considered but rejected:
   - XOR-TyDi is cross-lingual QA (RU question → EN passage) — no Russian passages
@@ -33,10 +33,10 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-NUM_RU_SYNTH_INSTRUCTED = 26_000
-NUM_RU_SYNTH_STANDARD = 10_000
-NUM_EN_SYNTH_INSTRUCTED = 20_000
-NUM_EN_SYNTH_STANDARD = 8_000
+NUM_RU_SYNTH_INSTRUCTED = 22_000
+NUM_RU_SYNTH_STANDARD = 8_000
+NUM_EN_SYNTH_INSTRUCTED = 17_000
+NUM_EN_SYNTH_STANDARD = 7_000
 
 # ---------------------------------------------------------------------------
 # PyArrow schema (matches RetrieverDataset expected by train.py)
