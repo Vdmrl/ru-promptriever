@@ -24,7 +24,7 @@ output_dir: "./output_ru-promptriever-continue"
 # IMPORTANT: Point this to the MERGED checkpoint from exp4 (after merge_lora.py).
 # If using HF: "Vladimirlv/ru-promptriever-qwen3-4b"
 # If local: path to merged model directory
-model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b"
+model_name_or_path: "./output_ru-promptriever-continue/checkpoint-220"
 attn_implementation: "sdpa"
 torch_dtype: "bfloat16"
 
@@ -66,7 +66,7 @@ per_device_train_batch_size: 8
 gradient_accumulation_steps: 4
 
 tf32: true
-num_train_epochs: 2              # 2 epochs because dataset is small (~28k rows)
+num_train_epochs: 1              # 2 epochs because dataset is small (~28k rows)
 max_steps: -1
 learning_rate: 5.0e-5            # LOWER lr to avoid killing instruction-following
 warmup_steps: 50                 # Fewer warmup steps (shorter training)
@@ -82,7 +82,7 @@ per_device_eval_batch_size: 2
 logging_steps: 10
 save_strategy: "steps"
 save_steps: 20
-save_total_limit: 5              # Keep more checkpoints to pick the best
+save_total_limit: 100              # Keep more checkpoints to pick the best
 push_to_hub: true
 gradient_checkpointing: true
 dataloader_num_workers: 4
