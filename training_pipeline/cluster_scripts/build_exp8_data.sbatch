@@ -7,7 +7,6 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
 
 module load Python/PyTorch_GPU_v2.4
 
