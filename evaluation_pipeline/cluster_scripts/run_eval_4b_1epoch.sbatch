@@ -13,4 +13,5 @@ export WANDB_MODE=disabled
 
 python evaluation_pipeline/evaluate.py \
   --config evaluation_pipeline/configs/baseline_qwen3-4b.yaml \
-  --models "ru-promptriever-qwen3-4b-continues-1epoch"
+  --models "ru-promptriever-qwen3-4b-continues-1epoch" \
+  --skip-existing
