@@ -1,0 +1,90 @@
+# =============================================================================
+# Experiment 8: Gold Mix — Final balanced multilingual training.
+# Goal: Maximize both standard nDCG and instruction-following (p-MRR) on RU+EN.
+#
+# Data: 80k rows total
+#   - 16k Russian real (MIRACL + MrTyDi + XOR-TyDi + RuBQ)
+#   - 26k Russian synthetic (instructed)
+#   - 10k Russian synthetic (standard)
+#   - 20k English synthetic (instructed, from original Promptriever/FollowIR)
+#   -  8k English synthetic (standard)
+#
+# Key design:
+#   - 1 epoch (80k is large enough)
+#   - Low LR (5e-5) to avoid catastrophic forgetting
+#   - Resume from the best merged checkpoint (Vladimirlv/ru-promptriever-qwen3-4b)
+#
+# Launch: torchrun --nproc_per_node=4 train.py --config configs/exp8_gold_mix.yaml
+# =============================================================================
+
+# --- General Hub & Logging ---
+hub_model_id: "Vladimirlv/ru-promptriever-qwen3-4b-v3"
+wandb_project: "ru-promptriever"
+run_name: "experiment_8_gold_mix"
+output_dir: "./output_ru-promptriever-exp8"
+
+# --- Model ---
+# Best merged checkpoint from previous experiments
+model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b"
+attn_implementation: "sdpa"
+torch_dtype: "bfloat16"
+
+# --- LoRA Configuration ---
+# Same targets as previous experiments — all 7 linear layer types
+lora_r: 32
+lora_alpha: 64
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# --- Data ---
+# Path to the Gold Mix dataset built by build_exp8_gold_mix.py
+train_data_path: "./exp8_gold_mix_dataset"
+eval_data_path: "Vladimirlv/ru-promptriever-dataset"
+train_split: "train"
+eval_split: "validation"
+instruct_only: false
+num_negatives: 10
+num_instruct_negatives: 3
+max_len_query: 512
+max_len_passage: 256
+
+# --- GradCache ---
+gc_chunk_size: 2
+
+# --- Training ---
+# Effective batch size = 8 × 4 × 4 = 128 (same as exp5).
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 4
+
+tf32: true
+num_train_epochs: 1              # 1 epoch for 80k rows
+max_steps: -1
+learning_rate: 5.0e-5            # Low LR to avoid catastrophic forgetting
+warmup_steps: 50
+fp16: false
+bf16: true
+load_in_4bit: false
+
+# --- Evaluation ---
+evaluation_strategy: "steps"
+eval_steps: 500
+per_device_eval_batch_size: 2
+
+logging_steps: 10
+save_strategy: "steps"
+save_steps: 20
+save_total_limit: 100
+push_to_hub: true
+gradient_checkpointing: true
+dataloader_num_workers: 4
+temperature: 0.01
+
+# --- Logging Auth ---
+report_to: "none"
+wandb_key: null                  # Set here or via the WANDB_API_KEY environment variable
