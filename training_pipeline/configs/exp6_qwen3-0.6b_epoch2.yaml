@@ -1,0 +1,86 @@
+# =============================================================================
+# Experiment 6: Qwen3-0.6B — Small model instruction-following experiment.
+# Goal: Test whether a small (<1B) model can learn instruction-aware retrieval.
+#
+# Data: ~20k synthetic instructed + ~10k synthetic standard + ~11k real (MIRACL+MrTyDi)
+# Total: ~42k rows. Build with:
+#   python build_continue_training_dataset.py \
+#       --output_dir ./qwen06b_dataset \
+#       --num_synthetic_instructed 20000 \
+#       --num_synthetic_standard 10000
+#
+# Launch: torchrun --nproc_per_node=4 train.py --config configs/exp6_qwen3-0.6b.yaml
+# =============================================================================
+
+# --- General Hub & Logging ---
+hub_model_id: "Vladimirlv/ru-promptriever-qwen3-0.6b"
+wandb_project: "ru-promptriever"
+run_name: "experiment_6_qwen3_0.6b"
+output_dir: "./output_ru-promptriever-qwen3-0.6b"
+
+# --- Model ---
+model_name_or_path: "./output_ru-promptriever-qwen3-0.6b/checkpoint-320"
+attn_implementation: "sdpa"
+torch_dtype: "bfloat16"
+
+# --- LoRA Configuration ---
+# Same rank as 4B — model is small so training is fast even with more params
+lora_r: 32
+lora_alpha: 64
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# --- Data ---
+# Built by build_continue_training_dataset.py with 20k instructed + 10k standard + all real
+train_data_path: "./qwen06b_dataset"
+eval_data_path: "Vladimirlv/ru-promptriever-dataset"
+train_split: "train"
+eval_split: "validation"
+instruct_only: false
+num_negatives: 10                # Real data has fewer negatives
+num_instruct_negatives: 3
+max_len_query: 512
+max_len_passage: 256
+
+# --- GradCache ---
+# Smaller model → can afford larger chunks
+gc_chunk_size: 4
+
+# --- Training ---
+# Smaller model → can increase per-device batch size
+# Effective batch size = 16 × 2 × 4 = 128
+per_device_train_batch_size: 16
+gradient_accumulation_steps: 2
+
+tf32: true
+num_train_epochs: 1
+max_steps: -1
+learning_rate: 1.0e-4
+warmup_steps: 100
+fp16: false
+bf16: true
+load_in_4bit: false
+
+# --- Evaluation ---
+evaluation_strategy: "steps"
+eval_steps: 500
+per_device_eval_batch_size: 4
+
+logging_steps: 10
+save_strategy: "steps"
+save_steps: 20
+save_total_limit: 100
+push_to_hub: true
+gradient_checkpointing: true
+dataloader_num_workers: 4
+temperature: 0.01
+
+# --- Logging Auth ---
+report_to: "none"
+wandb_key: null
