@@ -2,8 +2,10 @@
 #SBATCH --job-name=build_exp8
 #SBATCH --output=build_exp8_data.log
 
+#SBATCH --constraint="type_d|type_c"
 #SBATCH --time=02:00:00
 #SBATCH --nodes=1
+#SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 
