@@ -10,6 +10,6 @@
 
 module load Python/PyTorch_GPU_v2.4
 
-python training_pipeline/scripts/build_exp8_gold_mix.py \
+python data_preprocessing/build_continue_training_dataset_with_eng.py \
     --output_dir ./exp8_gold_mix_dataset \
     --seed 42
