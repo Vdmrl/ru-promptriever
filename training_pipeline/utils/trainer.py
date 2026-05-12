@@ -355,6 +355,38 @@ class RetrieverTrainer(Trainer):
         self._gc = None  # Lazy initialization
         self._encoder_wrapper = None
 
+    def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
+        """Override to handle PEFT/LoRA adapter checkpoints.
+
+        The default Trainer._load_from_checkpoint expects full model weight
+        shards (model.safetensors.index.json), which don't exist for LoRA
+        checkpoints that only save adapter_model.safetensors.  When we detect
+        a PEFT checkpoint we load the adapter weights directly, skipping the
+        full-model loading path entirely.
+        """
+        import os
+        from peft import set_peft_model_state_dict
+
+        if model is None:
+            model = self.model
+
+        adapter_path = os.path.join(resume_from_checkpoint, "adapter_model.safetensors")
+        adapter_bin_path = os.path.join(resume_from_checkpoint, "adapter_model.bin")
+
+        if os.path.exists(adapter_path) or os.path.exists(adapter_bin_path):
+            # This is a PEFT checkpoint — load adapter weights manually.
+            if os.path.exists(adapter_path):
+                from safetensors.torch import load_file
+                state_dict = load_file(adapter_path, device="cpu")
+            else:
+                state_dict = torch.load(adapter_bin_path, map_location="cpu", weights_only=True)
+
+            set_peft_model_state_dict(model, state_dict)
+            print(f"[train] Loaded PEFT adapter weights from {resume_from_checkpoint}")
+        else:
+            # Fall back to the default Trainer implementation for full-model checkpoints.
+            super()._load_from_checkpoint(resume_from_checkpoint, model=model)
+
     def _get_gc(self, queries, passages) -> GradCache:
         """Lazily build GradCache once the model is on GPU."""
         if self._gc is None:
