@@ -24,7 +24,7 @@ output_dir: "./output_ru-promptriever-continue"
 # IMPORTANT: Point this to the MERGED checkpoint from exp4 (after merge_lora.py).
 # If using HF: "Vladimirlv/ru-promptriever-qwen3-4b"
 # If local: path to merged model directory
-model_name_or_path: "./output_ru-promptriever-continue/checkpoint-220"
+model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b"
 attn_implementation: "sdpa"
 torch_dtype: "bfloat16"
 

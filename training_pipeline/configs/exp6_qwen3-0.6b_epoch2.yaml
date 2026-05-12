@@ -19,7 +19,7 @@ run_name: "experiment_6_qwen3_0.6b"
 output_dir: "./output_ru-promptriever-qwen3-0.6b"
 
 # --- Model ---
-model_name_or_path: "./output_ru-promptriever-qwen3-0.6b/checkpoint-320"
+model_name_or_path: "Qwen/Qwen3-0.6B"
 attn_implementation: "sdpa"
 torch_dtype: "bfloat16"
 
