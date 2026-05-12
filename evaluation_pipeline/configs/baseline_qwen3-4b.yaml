@@ -102,6 +102,12 @@ models:
     batch_size: 16
     max_length: 512
 
+  - name: "ru-promptriever-exp8-gold-mix"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-320"
+    batch_size: 4
+    max_length: 512
+
 # --- Datasets ---
 datasets:
   - name: "synthetic_test"
