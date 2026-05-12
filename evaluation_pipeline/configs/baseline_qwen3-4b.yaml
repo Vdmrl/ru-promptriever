@@ -73,7 +73,7 @@ models:
 
   - name: "ru-promptriever-qwen3-4b-continues-2epoch"
     type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-continue"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v2"
     batch_size: 4
     max_length: 512
 
@@ -85,7 +85,7 @@ models:
 
   - name: "ru-promptriever-qwen3-0.6b-2epoch"
     type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-qwen3-0.6b"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-0.6b"
     batch_size: 16
     max_length: 512
 
@@ -110,7 +110,7 @@ models:
 
   - name: "ru-promptriever-exp8-gold-mix-1epoch"
     type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-exp8"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v3"
     batch_size: 4
     max_length: 512
 
