@@ -1,0 +1,110 @@
+# =============================================================================
+# Checkpoint Sweep Config — evaluate intermediate checkpoints on mFollowIR
+# =============================================================================
+
+device: "cuda:0"
+dtype: "bfloat16"
+output_dir: "./results"
+retrieval_top_k: 1000
+generic_instruction: ""
+
+models:
+  # --- Exp5 (continues) checkpoints every 60 steps ---
+  - name: "continues-step-60"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-60"
+    batch_size: 4
+    max_length: 512
+
+  - name: "continues-step-120"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-120"
+    batch_size: 4
+    max_length: 512
+
+  - name: "continues-step-180"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-180"
+    batch_size: 4
+    max_length: 512
+
+  - name: "continues-step-240"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-240"
+    batch_size: 4
+    max_length: 512
+
+  - name: "continues-step-300"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-300"
+    batch_size: 4
+    max_length: 512
+
+  - name: "continues-step-360"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-360"
+    batch_size: 4
+    max_length: 512
+
+  - name: "continues-step-420"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-420"
+    batch_size: 4
+    max_length: 512
+
+  # --- Exp8 (gold-mix) checkpoints every 60 steps ---
+  - name: "gold-mix-step-60"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-60"
+    batch_size: 4
+    max_length: 512
+
+  - name: "gold-mix-step-120"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-120"
+    batch_size: 4
+    max_length: 512
+
+  - name: "gold-mix-step-180"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-180"
+    batch_size: 4
+    max_length: 512
+
+  - name: "gold-mix-step-240"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-240"
+    batch_size: 4
+    max_length: 512
+
+  - name: "gold-mix-step-300"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-300"
+    batch_size: 4
+    max_length: 512
+
+  - name: "gold-mix-step-360"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-360"
+    batch_size: 4
+    max_length: 512
+
+  - name: "gold-mix-step-420"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-420"
+    batch_size: 4
+    max_length: 512
+
+  - name: "gold-mix-step-480"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-480"
+    batch_size: 4
+    max_length: 512
+
+datasets:
+  - name: "mfollowir_ru"
+    type: "mfollowir"
+    data_path: "jhu-clsp/mFollowIR"
+    metrics:
+      - "ndcg_at_20"
+      - "p_mrr"
