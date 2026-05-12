@@ -1,110 +1,103 @@
-# =============================================================================
-# Checkpoint Sweep Config — evaluate intermediate checkpoints on mFollowIR
-# =============================================================================
-
-device: "cuda:0"
-dtype: "bfloat16"
-output_dir: "./results"
+device: cuda:0
+dtype: bfloat16
+output_dir: ./results
 retrieval_top_k: 1000
-generic_instruction: ""
-
+generic_instruction: ''
 models:
-  # --- Exp5 (continues) checkpoints every 60 steps ---
-  - name: "continues-step-60"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-60"
-    batch_size: 4
-    max_length: 512
-
-  - name: "continues-step-120"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-120"
-    batch_size: 4
-    max_length: 512
-
-  - name: "continues-step-180"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-180"
-    batch_size: 4
-    max_length: 512
-
-  - name: "continues-step-240"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-240"
-    batch_size: 4
-    max_length: 512
-
-  - name: "continues-step-300"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-300"
-    batch_size: 4
-    max_length: 512
-
-  - name: "continues-step-360"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-360"
-    batch_size: 4
-    max_length: 512
-
-  - name: "continues-step-420"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-420"
-    batch_size: 4
-    max_length: 512
-
-  # --- Exp8 (gold-mix) checkpoints every 60 steps ---
-  - name: "gold-mix-step-60"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-60"
-    batch_size: 4
-    max_length: 512
-
-  - name: "gold-mix-step-120"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-120"
-    batch_size: 4
-    max_length: 512
-
-  - name: "gold-mix-step-180"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-180"
-    batch_size: 4
-    max_length: 512
-
-  - name: "gold-mix-step-240"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-240"
-    batch_size: 4
-    max_length: 512
-
-  - name: "gold-mix-step-300"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-300"
-    batch_size: 4
-    max_length: 512
-
-  - name: "gold-mix-step-360"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-360"
-    batch_size: 4
-    max_length: 512
-
-  - name: "gold-mix-step-420"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-420"
-    batch_size: 4
-    max_length: 512
-
-  - name: "gold-mix-step-480"
-    type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-480"
-    batch_size: 4
-    max_length: 512
-
+- name: continues-step-60
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v2
+  revision: 05a2d754dd4b2e32536d138a7c45c487b6c6a956
+  batch_size: 4
+  max_length: 512
+- name: gold-mix-step-60
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v3
+  revision: b98520843cd8b298b68d8a35eb8dc71728b38208
+  batch_size: 4
+  max_length: 512
+- name: continues-step-120
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v2
+  revision: 924a54d6d7eb2398dd6899db448534ea5859c727
+  batch_size: 4
+  max_length: 512
+- name: gold-mix-step-120
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v3
+  revision: d7b2ee349394f3c88d03d4a78e4343275278637b
+  batch_size: 4
+  max_length: 512
+- name: continues-step-180
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v2
+  revision: a0d174daf820689c61fd86249c759f88d0e44a7e
+  batch_size: 4
+  max_length: 512
+- name: gold-mix-step-180
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v3
+  revision: 28b72fd3a7cb78a0e3587c63c9eda34b9e87f3cd
+  batch_size: 4
+  max_length: 512
+- name: continues-step-240
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v2
+  revision: 5c7c488c1a8fa118548f027a4cf36507a331cbdd
+  batch_size: 4
+  max_length: 512
+- name: gold-mix-step-240
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v3
+  revision: e6d80b21df605b5976ccc8b4463b0382a00637c9
+  batch_size: 4
+  max_length: 512
+- name: continues-step-300
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v2
+  revision: 342b39b5ad2b7b19afdbc4e7fe9182daabb86395
+  batch_size: 4
+  max_length: 512
+- name: gold-mix-step-300
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v3
+  revision: e51c0133ad5a67c9c374aa97eddc008037d45e29
+  batch_size: 4
+  max_length: 512
+- name: continues-step-360
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v2
+  revision: bfea5bb24818283fd815c6ae295719ab481e1fed
+  batch_size: 4
+  max_length: 512
+- name: gold-mix-step-360
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v3
+  revision: 1e127f5bdaa4513ac2498ba97adb8aa9f6fba4dd
+  batch_size: 4
+  max_length: 512
+- name: continues-step-420
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v2
+  revision: 09ef509217a8da4b52ad2a37c1899819c23a9f07
+  batch_size: 4
+  max_length: 512
+- name: gold-mix-step-420
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v3
+  revision: a7d167504f0cc602f737a3eca70bc9a3ccb90414
+  batch_size: 4
+  max_length: 512
+- name: gold-mix-step-480
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-v3
+  revision: f9aa45078ef812c8640f18dd4d88a35156efc9ea
+  batch_size: 4
+  max_length: 512
 datasets:
-  - name: "mfollowir_ru"
-    type: "mfollowir"
-    data_path: "jhu-clsp/mFollowIR"
-    metrics:
-      - "ndcg_at_20"
-      - "p_mrr"
+- name: mfollowir_ru
+  type: mfollowir
+  data_path: jhu-clsp/mFollowIR
+  metrics:
+  - ndcg_at_20
+  - p_mrr
