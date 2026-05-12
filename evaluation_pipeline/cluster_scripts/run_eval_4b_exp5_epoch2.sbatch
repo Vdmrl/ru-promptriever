@@ -13,5 +13,5 @@ export WANDB_MODE=disabled
 
 python evaluation_pipeline/evaluate.py \
     --config evaluation_pipeline/configs/baseline_qwen3-4b.yaml \
-    --model-names "ru-promptriever-qwen3-4b-continues-2epoch" \
-    --dataset-names "synthetic_test" "mfollowir_ru"
+    --models "ru-promptriever-qwen3-4b-continues-2epoch" \
+    --datasets "synthetic_test" "mfollowir_ru"
