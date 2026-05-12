@@ -5,7 +5,7 @@
 #SBATCH --constraint="type_e"
 #SBATCH --time=01:00:00
 #SBATCH --nodes=1
-#SBATCH --gpus=0
+#SBATCH --gpus=1
 #SBATCH --cpus-per-task=8
 
 module load Python/PyTorch_GPU_v2.4
