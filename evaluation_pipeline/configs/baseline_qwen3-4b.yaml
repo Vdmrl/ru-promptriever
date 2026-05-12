@@ -114,6 +114,12 @@ models:
     batch_size: 4
     max_length: 512
 
+  - name: "ru-promptriever-exp9-en-only"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-en-only"
+    batch_size: 4
+    max_length: 512
+
 # --- Datasets ---
 datasets:
   - name: "synthetic_test"

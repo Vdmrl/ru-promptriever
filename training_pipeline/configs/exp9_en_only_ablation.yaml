@@ -1,0 +1,90 @@
+# =============================================================================
+# Experiment 9: English-Only Ablation — Qwen3-4B trained ONLY on English data.
+# Goal: Determine whether quality improvements come from our Russian training
+#       strategy or simply from using Qwen3-4B as a more capable base model.
+#
+# Data: 200k English rows from samaya-ai/msmarco-w-instructions
+#   - 100k English Synthetic w/ instruction
+#   - 100k English Synthetic w/o instruction
+#
+# Key design:
+#   - Base Qwen3-4B (NO pretrained ru-promptriever weights)
+#   - Same hyperparameters as exp4 (the original training run)
+#   - 1 epoch, 8 GPUs to fit within 3-hour cluster limit
+#
+# Launch: torchrun --nproc_per_node=8 train.py --config configs/exp9_en_only_ablation.yaml
+# =============================================================================
+
+# --- General Hub & Logging ---
+hub_model_id: "Vladimirlv/ru-promptriever-qwen3-4b-en-only"
+wandb_project: "ru-promptriever"
+run_name: "experiment_9_en_only_ablation"
+output_dir: "./output_ru-promptriever-exp9"
+
+# --- Model ---
+# Base Qwen3-4B — NOT the pretrained ru-promptriever checkpoint.
+# This is the key difference from exp4/5/8: no Russian pretraining at all.
+model_name_or_path: "Qwen/Qwen3-4B"
+attn_implementation: "sdpa"
+torch_dtype: "bfloat16"
+
+# --- LoRA Configuration ---
+# Same targets as exp4 — all 7 linear layer types
+lora_r: 32
+lora_alpha: 64
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# --- Data ---
+# English-only dataset built by build_exp9_en_only.py
+train_data_path: "./exp9_en_only_dataset"
+eval_data_path: "Vladimirlv/ru-promptriever-dataset"
+train_split: "train"
+eval_split: "validation"
+instruct_only: false
+num_negatives: 30                # Same as exp4 (original paper)
+num_instruct_negatives: 3
+max_len_query: 512
+max_len_passage: 256
+
+# --- GradCache ---
+gc_chunk_size: 2
+
+# --- Training ---
+# 8 GPUs: effective batch = 8 × 4 × 8 = 256.
+# Halving accum_steps from 4 to 2 to keep ~128 effective batch (same as exp4).
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 2
+
+tf32: true
+num_train_epochs: 1
+max_steps: -1
+learning_rate: 1.0e-4            # Same as exp4
+warmup_steps: 100
+fp16: false
+bf16: true
+load_in_4bit: false
+
+# --- Evaluation ---
+evaluation_strategy: "steps"
+eval_steps: 500
+per_device_eval_batch_size: 2
+
+logging_steps: 10
+save_strategy: "steps"
+save_steps: 200
+save_total_limit: 3
+push_to_hub: true
+gradient_checkpointing: true
+dataloader_num_workers: 2
+temperature: 0.01
+
+# --- Logging Auth ---
+report_to: "none"
+wandb_key: null
