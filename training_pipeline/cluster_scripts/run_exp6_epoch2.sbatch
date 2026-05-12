@@ -6,7 +6,7 @@
 #SBATCH --time=03:00:00
 #SBATCH --nodes=1
 #SBATCH --gpus=4
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=8
 
 
 module load Python/PyTorch_GPU_v2.4

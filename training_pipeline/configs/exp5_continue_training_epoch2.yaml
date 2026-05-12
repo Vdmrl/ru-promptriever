@@ -85,7 +85,7 @@ save_steps: 20
 save_total_limit: 100              # Keep more checkpoints to pick the best
 push_to_hub: true
 gradient_checkpointing: true
-dataloader_num_workers: 4
+dataloader_num_workers: 2
 temperature: 0.01
 
 # --- Logging Auth ---
