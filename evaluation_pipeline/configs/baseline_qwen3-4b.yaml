@@ -73,7 +73,7 @@ models:
 
   - name: "ru-promptriever-qwen3-4b-continues-2epoch"
     type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-continue/checkpoint-444"
+    model_name_or_path: "./output_ru-promptriever-continue"
     batch_size: 4
     max_length: 512
 
@@ -85,7 +85,7 @@ models:
 
   - name: "ru-promptriever-qwen3-0.6b-2epoch"
     type: "causal_lm"
-    model_name_or_path: "./output_ru-promptriever-qwen3-0.6b/checkpoint-646"
+    model_name_or_path: "./output_ru-promptriever-qwen3-0.6b"
     batch_size: 16
     max_length: 512
 
@@ -105,6 +105,12 @@ models:
   - name: "ru-promptriever-exp8-gold-mix-0.5epoch"
     type: "causal_lm"
     model_name_or_path: "./output_ru-promptriever-exp8/checkpoint-320"
+    batch_size: 4
+    max_length: 512
+
+  - name: "ru-promptriever-exp8-gold-mix-1epoch"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-exp8"
     batch_size: 4
     max_length: 512
 
