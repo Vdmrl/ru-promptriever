@@ -6,73 +6,73 @@ generic_instruction: ''
 models:
 - name: 4b-pretrain-step-500
   type: causal_lm
-  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-pretrained
   revision: 9bae70a865952801a75beafde63f5fea05db8b29
   batch_size: 4
   max_length: 512
 - name: 4b-pretrain-step-1000
   type: causal_lm
-  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-pretrained
   revision: 6e9d95371291217f89870dddfd2bacd32d5e7002
   batch_size: 4
   max_length: 512
 - name: 4b-pretrain-step-1500
   type: causal_lm
-  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-pretrained
   revision: 01501be5bcf18b5e71a916be777e2416e8a83674
   batch_size: 4
   max_length: 512
 - name: 4b-pretrain-step-2000
   type: causal_lm
-  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-pretrained
   revision: 7c45645c975d0787cd57169a3c95efd4aa106af2
   batch_size: 4
   max_length: 512
 - name: 4b-pretrain-step-2500
   type: causal_lm
-  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-pretrained
   revision: 38eb20aaf07e555aa5c56a74d5db87d3f895e5a8
   batch_size: 4
   max_length: 512
 - name: 4b-pretrain-step-3000
   type: causal_lm
-  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-pretrained
   revision: e391b85156b8996d935eb05e0d29facfc588e639
   batch_size: 4
   max_length: 512
 - name: 4b-pretrain-step-3500
   type: causal_lm
-  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-pretrained
   revision: c989b15785d209f0c3ac36d7fb22a2d3af9d9637
   batch_size: 4
   max_length: 512
 - name: 4b-pretrain-step-4000
   type: causal_lm
-  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-pretrained
   revision: 0358463100c76500c405be6f9ef47e22b6136f34
   batch_size: 4
   max_length: 512
 - name: 4b-pretrain-step-4500
   type: causal_lm
-  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-pretrained
   revision: 9d81839d3fc6bb97aa46c07d5e78b67f1f6f0649
   batch_size: 4
   max_length: 512
 - name: 4b-pretrain-step-5000
   type: causal_lm
-  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-pretrained
   revision: bccafe600f4e42f08cf0a42dc5ffa7633c4e60e6
   batch_size: 4
   max_length: 512
 - name: 4b-pretrain-step-5500
   type: causal_lm
-  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-pretrained
   revision: ab3e425fcc3e0dc8f72ffcd17b7032a9d1c6afdd
   batch_size: 4
   max_length: 512
 - name: 4b-pretrain-step-5750
   type: causal_lm
-  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-4b-pretrained
   revision: dbf03096c11c2e3ffad74aeec0c99c0009022b72
   batch_size: 4
   max_length: 512
