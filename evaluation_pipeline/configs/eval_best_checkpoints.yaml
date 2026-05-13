@@ -1,0 +1,52 @@
+device: cuda:0
+dtype: bfloat16
+output_dir: ./results
+retrieval_top_k: 1000
+generic_instruction: ''
+
+models:
+  - name: "gold-mix-step-300"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v3"
+    revision: "e51c0133ad5a67c9c374aa97eddc008037d45e29"
+    batch_size: 4
+    max_length: 512
+
+  - name: "continues-step-180"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v2"
+    revision: "a0d174daf820689c61fd86249c759f88d0e44a7e"
+    batch_size: 4
+    max_length: 512
+
+  - name: "qwen3-1.7b-step-320"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-1.7b"
+    revision: "612f0dfac69d9fd718c952c388d4e8149d82b96b"
+    batch_size: 4
+    max_length: 512
+
+datasets:
+  - name: "synthetic_test"
+    type: "synthetic_test"
+    data_path: "Vladimirlv/ru-promptriever-dataset-v0.1"
+    split: "test"
+    metrics:
+      - "ndcg_at_20"
+      - "p_mrr"
+
+  - name: "mfollowir_ru"
+    type: "mfollowir"
+    data_path: "jhu-clsp/mFollowIR"
+    metrics:
+      - "ndcg_at_20"
+      - "p_mrr"
+
+  - name: "rumteb_retrieval"
+    type: "rumteb"
+    task_names:
+      - "RuBQRetrieval"
+      - "MIRACLRetrieval"
+      - "RiaNewsRetrieval"
+    metrics:
+      - "ndcg_at_10"
