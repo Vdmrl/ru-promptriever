@@ -50,3 +50,11 @@ datasets:
       - "RiaNewsRetrieval"
     metrics:
       - "ndcg_at_10"
+
+  - name: "en_mteb_retrieval"
+    type: "en_mteb"
+    task_names:
+      - "SciFact"
+      - "NFCorpus"
+    metrics:
+      - "ndcg_at_10"
