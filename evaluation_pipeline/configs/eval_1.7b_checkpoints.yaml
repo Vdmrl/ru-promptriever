@@ -1,0 +1,37 @@
+device: cuda:0
+dtype: bfloat16
+output_dir: ./results
+retrieval_top_k: 1000
+generic_instruction: ''
+models:
+- name: qwen3-1.7b-step-160
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-1.7b
+  revision: 82c7df9903b42003d51ee29e8958f9ee91238c8a
+  batch_size: 4
+  max_length: 512
+- name: qwen3-1.7b-step-320
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-1.7b
+  revision: 612f0dfac69d9fd718c952c388d4e8149d82b96b
+  batch_size: 4
+  max_length: 512
+- name: qwen3-1.7b-step-480
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-1.7b
+  revision: 6df5e07e16c705380456e294e255b788c24b39cd
+  batch_size: 4
+  max_length: 512
+- name: qwen3-1.7b-step-640
+  type: causal_lm
+  model_name_or_path: Vladimirlv/ru-promptriever-qwen3-1.7b
+  revision: 9d385cbf3f079ff5ac8581b93ec6bc5656f040bb
+  batch_size: 4
+  max_length: 512
+datasets:
+- name: mfollowir_ru
+  type: mfollowir
+  data_path: jhu-clsp/mFollowIR
+  metrics:
+  - ndcg_at_20
+  - p_mrr
