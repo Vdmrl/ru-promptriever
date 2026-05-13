@@ -20,5 +20,6 @@ for MODEL in "4b-pretrain-step-3500" "4b-pretrain-step-4000" "4b-pretrain-step-4
     python evaluation_pipeline/evaluate.py \
         --config evaluation_pipeline/configs/eval_4b_pretrain_checkpoints.yaml \
         --models "${MODEL}" \
-        --datasets "mfollowir_ru"
+        --datasets "mfollowir_ru" \
+        --skip-existing
 done
