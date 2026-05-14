@@ -46,8 +46,6 @@ datasets:
     type: "rumteb"
     task_names:
       - "RuBQRetrieval"
-      - "MIRACLRetrieval"
-      - "RiaNewsRetrieval"
     metrics:
       - "ndcg_at_10"
 
