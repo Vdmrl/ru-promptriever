@@ -179,6 +179,14 @@ class GigaEmbeddingRetriever(EncoderProtocol, BaseRetriever):
         )
         return embeddings
 
+    def encode_queries(self, queries: List[str], batch_size: int = 16, **kwargs) -> np.ndarray:
+        """Called by MTEB specifically for queries."""
+        return self.encode(queries, batch_size=batch_size, prompt_name="query", **kwargs)
+
+    def encode_corpus(self, corpus: List[str] | List[dict], batch_size: int = 16, **kwargs) -> np.ndarray:
+        """Called by MTEB specifically for documents/paragraphs."""
+        return self.encode(corpus, batch_size=batch_size, prompt_name="passage", **kwargs)
+
     def similarity(self, e1, e2):
         """Cosine similarity via dot product (embeddings are L2-normalized)."""
         if not isinstance(e1, torch.Tensor):

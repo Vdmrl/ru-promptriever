@@ -1,0 +1,46 @@
+device: cuda:0
+dtype: bfloat16
+output_dir: ./results
+retrieval_top_k: 1000
+generic_instruction: ''
+
+models:
+  - name: "exp9-en-only-final"
+    type: "causal_lm"
+    model_name_or_path: "./output_ru-promptriever-exp9"  # Auto-resolves to the latest local checkpoint-XXX directory
+    # Alternatively, to run from Hugging Face Hub revision, uncomment and configure:
+    # model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-en-only"
+    # revision: "your_commit_hash"
+    batch_size: 4
+    max_length: 512
+
+datasets:
+  - name: "synthetic_test"
+    type: "synthetic_test"
+    data_path: "Vladimirlv/ru-promptriever-dataset-v0.1"
+    split: "test"
+    metrics:
+      - "ndcg_at_20"
+      - "p_mrr"
+
+  - name: "mfollowir_ru"
+    type: "mfollowir"
+    data_path: "jhu-clsp/mFollowIR"
+    metrics:
+      - "ndcg_at_20"
+      - "p_mrr"
+
+  - name: "rumteb_retrieval"
+    type: "rumteb"
+    task_names:
+      - "RuBQRetrieval"
+    metrics:
+      - "ndcg_at_10"
+
+  - name: "en_mteb_retrieval"
+    type: "en_mteb"
+    task_names:
+      - "SciFact"
+      - "NFCorpus"
+    metrics:
+      - "ndcg_at_10"
