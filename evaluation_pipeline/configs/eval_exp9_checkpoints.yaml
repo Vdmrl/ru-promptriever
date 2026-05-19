@@ -1,0 +1,35 @@
+device: cuda:0
+dtype: bfloat16
+output_dir: ./results
+retrieval_top_k: 1000
+generic_instruction: ''
+
+models:
+  - name: "exp9-en-only-step-200"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-en-only"
+    revision: "02ff046d6ab45802af78c7fe8a2ad9d7bf565ac2"
+    batch_size: 4
+    max_length: 512
+
+  - name: "exp9-en-only-step-400"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-en-only"
+    revision: "6f135126cd794a971281939659573580359578a7"
+    batch_size: 4
+    max_length: 512
+
+  - name: "exp9-en-only-step-600"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-en-only"
+    revision: "9cb679e7ac405cd9f9306587206d4e13223c4124"
+    batch_size: 4
+    max_length: 512
+
+datasets:
+  - name: "mfollowir_ru"
+    type: "mfollowir"
+    data_path: "jhu-clsp/mFollowIR"
+    metrics:
+      - "ndcg_at_20"
+      - "p_mrr"
