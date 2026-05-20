@@ -81,7 +81,6 @@ save_strategy: "steps"
 save_steps: 50
 save_total_limit: 3
 push_to_hub: true
-hub_steps: 50
 gradient_checkpointing: true
 dataloader_num_workers: 2
 temperature: 0.01

@@ -198,7 +198,6 @@ def train(cfg: dict) -> None:
         hub_model_id=cfg.get("hub_model_id", None),
         hub_token=os.environ.get("HF_TOKEN", None),
         hub_strategy=cfg.get("hub_strategy", "checkpoint"),
-        hub_steps=cfg.get("hub_steps", cfg.get("save_steps", 100)),
         gradient_checkpointing=cfg.get("gradient_checkpointing", True),
         gradient_checkpointing_kwargs={"use_reentrant": False},
         ddp_find_unused_parameters=False,
