@@ -1,0 +1,25 @@
+name: "InstructIR Evaluation"
+output_dir: "./results_instructir"
+device: "cuda:0"
+dtype: "bfloat16"
+retrieval_top_k: 100
+
+models:
+  - name: "ru-promptriever-qwen3-4b"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b"
+    max_length: 512
+  - name: "ru-promptriever-qwen3-4b-ru-only"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-ru-only"
+    max_length: 512
+  - name: "ru-promptriever-qwen3-4b-en-only"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-en-only"
+    max_length: 512
+
+datasets:
+  - name: "instructir"
+    type: "en_mteb"
+    task_names:
+      - "InstructIR"
