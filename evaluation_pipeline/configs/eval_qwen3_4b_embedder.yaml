@@ -1,0 +1,24 @@
+name: "Qwen3-4B Embedder Evaluation"
+output_dir: "./results_followir_eng"
+device: "cuda:0"
+dtype: "bfloat16"
+retrieval_top_k: 100
+
+models:
+  - name: "qwen3_4b_embedder"
+    type: "qwen3_embedding"
+    model_name_or_path: "Qwen/Qwen3-Embedding-4B"
+    max_length: 512
+
+datasets:
+  - name: "followir_eng"
+    type: "en_mteb"
+    task_names:
+      - "Robust04InstructionRetrieval"
+      - "Core17InstructionRetrieval"
+      - "News21InstructionRetrieval"
+      
+  - name: "instructir"
+    type: "en_mteb"
+    task_names:
+      - "InstructIR"
