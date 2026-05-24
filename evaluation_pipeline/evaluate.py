@@ -531,17 +531,32 @@ def evaluate_with_mteb(
     output_dir: str,
     batch_size: int = 32,
 ) -> List[Dict]:
-    """Run MTEB evaluation for ruMTEB built-in tasks.
+    """Run MTEB evaluation for ruMTEB/en_mteb built-in tasks.
 
-    For CausalLM models on ruMTEB, wraps the model to inject the
-    generic instruction into queries.
+    For CausalLM models on plain retrieval tasks (rumteb, en_mteb), wraps
+    the model to inject the generic instruction into queries.
+
+    InstructionRetrieval / InstructionReranking tasks (e.g. FollowIR) are
+    excluded from wrapping because MTEB already concatenates the instruction
+    field into the query text.
     """
     eval_model = model
-    if model_type == "causal_lm" and dataset_type in ("rumteb", "en_mteb"):
+    # InstructionRetrieval tasks already embed instructions in query text —
+    # wrapping would double-inject (and in the wrong language for cross-lingual).
+    is_instruction_task = any(
+        getattr(t.metadata, "type", "") in ("InstructionRetrieval", "InstructionReranking")
+        for t in tasks
+    )
+    if model_type == "causal_lm" and dataset_type in ("rumteb", "en_mteb") and not is_instruction_task:
         logger.info(
             f'Wrapping CausalLM with generic instruction: "{generic_instruction}"'
         )
         eval_model = CausalLMRetrieverWithInstruction(model)
+    elif is_instruction_task:
+        logger.info(
+            "Skipping generic instruction wrapper — InstructionRetrieval tasks "
+            "already have instructions embedded in queries by MTEB."
+        )
 
     evaluation = mteb.MTEB(tasks=tasks)
     results = evaluation.run(
@@ -550,6 +565,7 @@ def evaluate_with_mteb(
         batch_size=batch_size,
     )
     return results
+
 
 
 # ---------------------------------------------------------------------------

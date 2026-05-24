@@ -1,0 +1,31 @@
+name: "FollowIR English Evaluation"
+output_dir: "./results_followir_eng"
+device: "cuda:0"
+dtype: "bfloat16"
+retrieval_top_k: 100
+
+models:
+  - name: "ru-promptriever-qwen3-4b"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b"
+    max_length: 512
+  - name: "ru-promptriever-qwen3-4b-ru-only"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-ru-only"
+    max_length: 512
+  - name: "ru-promptriever-qwen3-4b-en-only"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-en-only"
+    max_length: 512
+  - name: "ru-promptriever-qwen3-1.7b"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-1.7b"
+    max_length: 512
+
+datasets:
+  - name: "followir_eng"
+    type: "en_mteb"
+    task_names:
+      - "Robust04InstructionRetrieval"
+      - "Core17InstructionRetrieval"
+      - "News21InstructionRetrieval"
