@@ -142,9 +142,8 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         self.device = device
         self.query_prefix = query_prefix
         self.passage_prefix = passage_prefix
-        # Tokenization is determined by the training protocol, not by whether
-        # the published checkpoint happens to be a PEFT adapter. Both model
-        # families use PEFT, but only Promptriever manually appends EOS.
+        # Tokenization is an explicit evaluation-protocol choice. Historical
+        # configs may omit it; those retain the previous PEFT-based behavior.
         self.append_eos = append_eos
 
         torch_dtype = getattr(torch, dtype, torch.bfloat16)
@@ -316,9 +315,7 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
                     self.model.device
                 )
             else:
-                # ru-Promptriever uses standard tokenization, matching its
-                # RetrieverCollator training protocol for both merged and
-                # PEFT checkpoints.
+                # Standard tokenizer output without manual EOS insertion.
                 inputs = self.tokenizer(
                     batch_texts,
                     padding=True,

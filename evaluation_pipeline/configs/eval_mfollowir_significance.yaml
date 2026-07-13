@@ -16,10 +16,12 @@ models:
 
   - name: "ru-promptriever-qwen3-4b"
     type: "causal_lm"
-    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b"
+    # Exact gold-mix step-300 checkpoint reported in the paper.
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v3"
+    revision: "e51c0133ad5a67c9c374aa97eddc008037d45e29"
     batch_size: 4
     max_length: 512
-    append_eos: false
+    append_eos: true
 
 datasets:
   - name: "mfollowir_ru"
