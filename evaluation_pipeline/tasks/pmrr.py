@@ -43,6 +43,23 @@ def compute_pmrr(
     Returns:
         p-MRR score (raw, in [-1, +1]).  Multiply by 100 for display.
     """
+    qid_wise = compute_pmrr_per_query(results_original, results_changed, qrel_diff)
+    if not qid_wise:
+        return 0.0
+    return float(sum(qid_wise.values()) / len(qid_wise))
+
+
+def compute_pmrr_per_query(
+    results_original: Dict[str, Dict[str, float]],
+    results_changed: Dict[str, Dict[str, float]],
+    qrel_diff: Dict[str, List[str]],
+) -> Dict[str, float]:
+    """Return macro-ready p-MRR values for individual query topics.
+
+    Averaging the returned values reproduces :func:`compute_pmrr`. Keeping the
+    topic-level values enables paired bootstrap and randomization tests between
+    systems evaluated on the same mFollowIR topics.
+    """
     changes = []
 
     for qid, changed_docs in qrel_diff.items():
@@ -71,7 +88,7 @@ def compute_pmrr(
             )
 
     if not changes:
-        return 0.0
+        return {}
 
     # Compute rank_score for each changed document
     df = pd.DataFrame(changes)
@@ -79,7 +96,7 @@ def compute_pmrr(
 
     # Average per query, then macro-average across queries
     qid_wise = df.groupby("qid").agg({"p-MRR": "mean"})
-    return float(qid_wise["p-MRR"].mean())
+    return {str(qid): float(value) for qid, value in qid_wise["p-MRR"].items()}
 
 
 def _rank_score(x) -> float:

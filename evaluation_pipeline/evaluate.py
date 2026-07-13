@@ -20,6 +20,8 @@ Usage:
 """
 
 import argparse
+import gzip
+import json
 import logging
 import os
 from typing import Dict, List, Optional
@@ -34,7 +36,7 @@ from models.encoder_retriever import EncoderRetriever
 from models.giga_embedding_retriever import GigaEmbeddingRetriever
 from models.qwen3_embedding_retriever import Qwen3EmbeddingRetriever
 from tasks.mfollowir_ru_task import MFollowIRRuRetrieval
-from tasks.pmrr import compute_pmrr
+from tasks.pmrr import compute_pmrr, compute_pmrr_per_query
 from tasks.synthetic_test_task import RuPrompTrieverTestRetrieval
 from utils.data_utils import load_config, print_summary_table, print_intermediate_result, save_results
 
@@ -243,6 +245,83 @@ def compute_retrieval_metrics(
             avg_metrics[metric_name] = float(np.mean(values))
 
     return avg_metrics
+
+
+def compute_retrieval_metrics_per_query(
+    qrels: Dict[str, Dict[str, int]],
+    results: Dict[str, Dict[str, float]],
+    metrics: List[str] = ("ndcg_cut_20",),
+) -> Dict[str, Dict[str, float]]:
+    """Compute retrieval metrics separately for every query topic."""
+    import pytrec_eval
+
+    evaluator = pytrec_eval.RelevanceEvaluator(qrels, set(metrics))
+    scores = evaluator.evaluate(results)
+    return {
+        str(qid): {str(metric): float(value) for metric, value in values.items()}
+        for qid, values in scores.items()
+    }
+
+
+def save_mfollowir_detailed_artifacts(
+    output_dir: str,
+    model_name: str,
+    dataset_name: str,
+    task: MFollowIRRuRetrieval,
+    retrieval_results: Dict[str, Dict[str, float]],
+) -> Dict[str, str]:
+    """Save run-level and topic-level mFollowIR artifacts for paired tests."""
+    task.load_data()
+    qrels = task.relevant_docs["test"]
+    changed_results = {
+        qid: docs for qid, docs in retrieval_results.items() if qid.endswith("-changed")
+    }
+    changed_qrels = {qid: docs for qid, docs in qrels.items() if qid.endswith("-changed")}
+    ndcg_by_query = compute_retrieval_metrics_per_query(
+        changed_qrels, changed_results, metrics=("ndcg_cut_20",)
+    )
+
+    original_results = {
+        qid: docs for qid, docs in retrieval_results.items() if qid.endswith("-og")
+    }
+    pmrr_by_query = compute_pmrr_per_query(
+        original_results,
+        changed_results,
+        task.get_qrel_diff(),
+    )
+
+    bare_ids = sorted(
+        set(qid.removesuffix("-changed") for qid in ndcg_by_query) | set(pmrr_by_query)
+    )
+    per_query = {}
+    for qid in bare_ids:
+        changed_qid = f"{qid}-changed"
+        row = {}
+        if changed_qid in ndcg_by_query:
+            row["ndcg_cut_20"] = ndcg_by_query[changed_qid]["ndcg_cut_20"]
+        if qid in pmrr_by_query:
+            row["p_mrr"] = pmrr_by_query[qid]
+        per_query[qid] = row
+
+    os.makedirs(output_dir, exist_ok=True)
+    stem = f"{model_name}__{dataset_name}"
+    per_query_path = os.path.join(output_dir, f"{stem}__per_query.json")
+    run_path = os.path.join(output_dir, f"{stem}__run.json.gz")
+
+    payload = {
+        "model": model_name,
+        "dataset": dataset_name,
+        "n_topics": len(per_query),
+        "per_query": per_query,
+    }
+    with open(per_query_path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+    with gzip.open(run_path, "wt", encoding="utf-8") as handle:
+        json.dump(retrieval_results, handle, ensure_ascii=False, sort_keys=True)
+
+    logger.info("Saved mFollowIR per-query metrics: %s", per_query_path)
+    logger.info("Saved mFollowIR run: %s", run_path)
+    return {"per_query": per_query_path, "run": run_path}
 
 
 # ---------------------------------------------------------------------------
@@ -875,6 +954,14 @@ def main():
                                 pmrr = evaluate_pmrr_synthetic(task, retrieval_results)
                                 all_metrics["p_mrr"] = pmrr
                                 logger.info(f"p-MRR: {pmrr * 100:.2f} (raw: {pmrr:.4f})")
+                                if isinstance(task, MFollowIRRuRetrieval):
+                                    save_mfollowir_detailed_artifacts(
+                                        output_dir,
+                                        model_name,
+                                        dataset_name,
+                                        task,
+                                        retrieval_results,
+                                    )
 
                 save_results(all_metrics, model_name, dataset_name, output_dir)
                 print_intermediate_result(model_name, dataset_name, all_metrics)

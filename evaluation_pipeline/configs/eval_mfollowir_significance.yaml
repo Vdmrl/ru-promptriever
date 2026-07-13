@@ -1,0 +1,28 @@
+device: "cuda:0"
+dtype: "bfloat16"
+output_dir: "./results_mfollowir_significance"
+retrieval_top_k: 1000
+generic_instruction: ""
+
+models:
+  - name: "promptriever-llama3.1-8b"
+    type: "causal_lm"
+    model_name_or_path: "samaya-ai/promptriever-llama3.1-8b-v1"
+    batch_size: 16
+    max_length: 512
+    query_prefix: "query:  "
+    passage_prefix: "passage:  "
+
+  - name: "ru-promptriever-qwen3-4b"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b"
+    batch_size: 4
+    max_length: 512
+
+datasets:
+  - name: "mfollowir_ru"
+    type: "mfollowir"
+    data_path: "jhu-clsp/mFollowIR"
+    metrics:
+      - "ndcg_at_20"
+      - "p_mrr"
