@@ -134,6 +134,7 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         generic_instruction: str = "Найди релевантный документ.",
         query_prefix: str = "",
         passage_prefix: str = "",
+        append_eos: Optional[bool] = None,
         **kwargs,
     ):
         self.max_length = max_length
@@ -141,6 +142,10 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         self.device = device
         self.query_prefix = query_prefix
         self.passage_prefix = passage_prefix
+        # Tokenization is determined by the training protocol, not by whether
+        # the published checkpoint happens to be a PEFT adapter. Both model
+        # families use PEFT, but only Promptriever manually appends EOS.
+        self.append_eos = append_eos
 
         torch_dtype = getattr(torch, dtype, torch.bfloat16)
         self._is_peft = False  # Will be set to True if PEFT model detected
@@ -225,10 +230,15 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         self.tokenizer.padding_side = "right"
 
+        # Preserve the historical behavior for old configs while allowing
+        # adapters trained with standard tokenization to opt out explicitly.
+        if self.append_eos is None:
+            self.append_eos = self._is_peft
+
         logger.info(
             f"Loaded {model_name_or_path} (peft={self._is_peft}), "
             f"hidden_size={self.model.config.hidden_size}, "
-            f"dtype={torch_dtype}"
+            f"dtype={torch_dtype}, append_eos={self.append_eos}"
         )
 
     def _tokenize_with_eos(self, texts, max_length):
@@ -297,7 +307,7 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         for start in trange(0, len(sentences), batch_size, desc="Encoding"):
             batch_texts = sentences[start : start + batch_size]
 
-            if self._is_peft:
+            if self.append_eos:
                 # Official Promptriever tokenization protocol:
                 # 1. Truncate to max_length - 1 (leave room for EOS)
                 # 2. Manually append EOS token
@@ -306,8 +316,9 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
                     self.model.device
                 )
             else:
-                # Merged models (e.g. ru-promptriever): standard tokenization
-                # matches how the model was trained (RetrieverCollator)
+                # ru-Promptriever uses standard tokenization, matching its
+                # RetrieverCollator training protocol for both merged and
+                # PEFT checkpoints.
                 inputs = self.tokenizer(
                     batch_texts,
                     padding=True,

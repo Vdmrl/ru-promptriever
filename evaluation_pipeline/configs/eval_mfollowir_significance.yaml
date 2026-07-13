@@ -12,12 +12,14 @@ models:
     max_length: 512
     query_prefix: "query:  "
     passage_prefix: "passage:  "
+    append_eos: true
 
   - name: "ru-promptriever-qwen3-4b"
     type: "causal_lm"
     model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b"
     batch_size: 4
     max_length: 512
+    append_eos: false
 
 datasets:
   - name: "mfollowir_ru"
