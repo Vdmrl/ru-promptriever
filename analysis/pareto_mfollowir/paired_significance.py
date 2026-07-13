@@ -68,6 +68,54 @@ def paired_randomization(
     return float((extreme + 1) / (repetitions + 1))
 
 
+def randomization_greater_than_zero(
+    values: np.ndarray,
+    rng: np.random.Generator,
+    repetitions: int,
+) -> float:
+    """One-sided sign-flip test for a positive mean."""
+    observed = float(values.mean())
+    extreme = 0
+    chunk = 10_000
+    for start in range(0, repetitions, chunk):
+        size = min(chunk, repetitions - start)
+        signs = rng.choice(np.asarray([-1.0, 1.0]), size=(size, values.size))
+        randomized = (signs * values).mean(axis=1)
+        extreme += int(np.count_nonzero(randomized >= observed - 1e-15))
+    return float((extreme + 1) / (repetitions + 1))
+
+
+def analyze_against_zero(
+    payload: dict,
+    metric: str,
+    rng: np.random.Generator,
+    bootstrap_repetitions: int,
+    randomization_repetitions: int,
+) -> dict:
+    ids = sorted(
+        qid for qid, row in payload["per_query"].items() if metric in row
+    )
+    values = np.asarray(
+        [payload["per_query"][qid][metric] for qid in ids], dtype=np.float64
+    )
+    ci_low, ci_high = paired_bootstrap(values, rng, bootstrap_repetitions)
+    p_two_sided = paired_randomization(values, rng, randomization_repetitions)
+    p_greater = randomization_greater_than_zero(
+        values, rng, randomization_repetitions
+    )
+    scale = METRICS[metric]["scale"]
+    return {
+        "metric": metric,
+        "label": METRICS[metric]["label"],
+        "n_topics": len(ids),
+        "mean": float(values.mean() * scale),
+        "bootstrap_95_ci": [float(ci_low * scale), float(ci_high * scale)],
+        "randomization_p_two_sided": p_two_sided,
+        "randomization_p_greater_than_zero": p_greater,
+        "topic_ids": ids,
+    }
+
+
 def analyze_metric(
     a: dict,
     b: dict,
@@ -111,6 +159,14 @@ def main() -> None:
         analyze_metric(a, b, metric, rng, args.bootstrap, args.randomization)
         for metric in METRICS
     ]
+    pmrr_against_zero = {
+        "model_a": analyze_against_zero(
+            a, "p_mrr", rng, args.bootstrap, args.randomization
+        ),
+        "model_b": analyze_against_zero(
+            b, "p_mrr", rng, args.bootstrap, args.randomization
+        ),
+    }
     output = {
         "model_a": a.get("model", str(args.model_a)),
         "model_b": b.get("model", str(args.model_b)),
@@ -119,6 +175,7 @@ def main() -> None:
         "bootstrap_repetitions": args.bootstrap,
         "randomization_repetitions": args.randomization,
         "metrics": analyses,
+        "p_mrr_against_zero": pmrr_against_zero,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8") as handle:
@@ -134,6 +191,14 @@ def main() -> None:
             f"diff={row['difference_a_minus_b']:+.4f}, "
             f"95% CI [{low:+.4f}, {high:+.4f}], "
             f"p={row['paired_randomization_p_two_sided']:.6f}"
+        )
+    for model_key, row in pmrr_against_zero.items():
+        low, high = row["bootstrap_95_ci"]
+        print(
+            f"{row['label']} {model_key} vs 0: n={row['n_topics']}, "
+            f"mean={row['mean']:.4f}, 95% CI [{low:+.4f}, {high:+.4f}], "
+            f"p(two-sided)={row['randomization_p_two_sided']:.6f}, "
+            f"p(greater)={row['randomization_p_greater_than_zero']:.6f}"
         )
 
 
