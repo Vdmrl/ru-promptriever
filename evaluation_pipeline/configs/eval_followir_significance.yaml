@@ -26,6 +26,17 @@ models:
     batch_size: 4
     max_length: 512
 
+  # Exact backbone/model corresponding to the Promptriever values copied
+  # from Table 2 of Weller et al. (2024): Llama-2-7B, not Llama-3.1-8B.
+  - name: "promptriever-7b-published"
+    type: "causal_lm"
+    model_name_or_path: "samaya-ai/promptriever-llama2-7b-v1"
+    query_prefix: "query:  "
+    passage_prefix: "passage:  "
+    append_eos: true
+    batch_size: 4
+    max_length: 512
+
   - name: "ru-en-paper"
     type: "causal_lm"
     model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v3"
