@@ -110,13 +110,16 @@ def _per_topic(task_name: str, task, run: dict[str, dict[str, float]]) -> dict[s
     _, qrels = _task_split(task)
     qdiff = _qrel_diff(task)
     metric_name = "map_cut_1000" if task_name != "News21InstructionRetrieval" else "ndcg_cut_5"
-    changed_qrels = {qid: docs for qid, docs in qrels.items() if qid.endswith("-changed") and qid in run}
-    changed_run = {qid: run[qid] for qid in changed_qrels}
-    scores = pytrec_eval.RelevanceEvaluator(changed_qrels, {metric_name}).evaluate(changed_run)
+    # The paper's FollowIR retrieval-quality columns use the original (``-og``)
+    # query condition.  p-MRR below still compares the paired original and
+    # changed runs, exactly as in the official FollowIR implementation.
+    original_qrels = {qid: docs for qid, docs in qrels.items() if qid.endswith("-og") and qid in run}
+    original_run = {qid: run[qid] for qid in original_qrels}
+    scores = pytrec_eval.RelevanceEvaluator(original_qrels, {metric_name}).evaluate(original_run)
 
     rows: dict[str, dict[str, float]] = {}
-    for changed_qid, values in scores.items():
-        base = changed_qid.removesuffix("-changed")
+    for original_qid, values in scores.items():
+        base = original_qid.removesuffix("-og")
         rows.setdefault(base, {})["retrieval"] = float(values[metric_name])
 
     for base, changed_docs in qdiff.items():
