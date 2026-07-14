@@ -841,6 +841,11 @@ def main():
         default=None,
         help="Hugging Face Dataset repo ID for automatic intermediate uploads (e.g. 'Vladimirlv/my-results').",
     )
+    parser.add_argument(
+        "--no-summary",
+        action="store_true",
+        help="Do not print the cumulative results table at the end of the run.",
+    )
 
     args = parser.parse_args()
 
@@ -856,11 +861,25 @@ def main():
     # Filter models
     models_cfg = config.get("models", [])
     if args.models:
+        available_models = {m["name"] for m in models_cfg}
+        unknown_models = sorted(set(args.models) - available_models)
+        if unknown_models:
+            parser.error(
+                f"Unknown model(s): {', '.join(unknown_models)}. "
+                f"Available: {', '.join(sorted(available_models))}"
+            )
         models_cfg = [m for m in models_cfg if m["name"] in args.models]
 
     # Filter datasets
     datasets_cfg = config.get("datasets", [])
     if args.datasets:
+        available_datasets = {d["name"] for d in datasets_cfg}
+        unknown_datasets = sorted(set(args.datasets) - available_datasets)
+        if unknown_datasets:
+            parser.error(
+                f"Unknown dataset(s): {', '.join(unknown_datasets)}. "
+                f"Available: {', '.join(sorted(available_datasets))}"
+            )
         datasets_cfg = [d for d in datasets_cfg if d["name"] in args.datasets]
 
     logger.info(f"Models to evaluate: {[m['name'] for m in models_cfg]}")
@@ -1011,7 +1030,8 @@ def main():
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-    print_summary_table(output_dir)
+    if not args.no_summary:
+        print_summary_table(output_dir)
 
 
 if __name__ == "__main__":
