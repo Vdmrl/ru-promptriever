@@ -640,6 +640,14 @@ def evaluate_with_mteb(
         )
 
     evaluation = mteb.MTEB(tasks=tasks)
+    # Custom encoder wrappers do not ship MTEB metadata.  Ordinary evaluation
+    # tolerates that, but MTEB's prediction writer dereferences
+    # ``model.mteb_model_meta``.  Attach the same fallback metadata that the
+    # deprecated evaluator creates internally so raw rankings can be saved.
+    if getattr(eval_model, "mteb_model_meta", None) is None:
+        model_meta = evaluation.create_model_meta(eval_model)
+        model_meta.name = model_name
+        eval_model.mteb_model_meta = model_meta
     prediction_folder = None
     if save_predictions:
         prediction_folder = os.path.join(output_dir, "predictions", model_name)
