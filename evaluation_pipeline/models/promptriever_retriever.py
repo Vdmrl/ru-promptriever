@@ -125,6 +125,15 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
     Supports both plain CausalLM and PEFT/LoRA models (e.g. Promptriever).
     """
 
+    @property
+    def mteb_model_meta(self):
+        """MTEB metadata used when serializing raw task predictions."""
+        return getattr(self, "_mteb_model_meta", None)
+
+    @mteb_model_meta.setter
+    def mteb_model_meta(self, value):
+        self._mteb_model_meta = value
+
     def __init__(
         self,
         model_name_or_path: str,
@@ -137,6 +146,7 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         append_eos: Optional[bool] = None,
         **kwargs,
     ):
+        self._mteb_model_meta = None
         self.max_length = max_length
         self.generic_instruction = generic_instruction
         self.device = device

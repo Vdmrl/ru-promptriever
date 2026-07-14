@@ -574,6 +574,14 @@ class CausalLMRetrieverWithInstruction(mteb.EncoderProtocol):
         self.base_model = base_model
         self.generic_instruction = base_model.generic_instruction
 
+    @property
+    def mteb_model_meta(self):
+        return self.base_model.mteb_model_meta
+
+    @mteb_model_meta.setter
+    def mteb_model_meta(self, value):
+        self.base_model.mteb_model_meta = value
+
     def encode(self, sentences, batch_size=32, prompt_name=None, **kwargs):
         if prompt_name == "query":
             sentences = [f"{s} {self.generic_instruction}" for s in sentences]
