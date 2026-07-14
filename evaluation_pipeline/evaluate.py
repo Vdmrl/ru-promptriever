@@ -610,6 +610,7 @@ def evaluate_with_mteb(
     generic_instruction: str,
     output_dir: str,
     batch_size: int = 32,
+    save_predictions: bool = False,
 ) -> List[Dict]:
     """Run MTEB evaluation for ruMTEB/en_mteb built-in tasks.
 
@@ -639,10 +640,17 @@ def evaluate_with_mteb(
         )
 
     evaluation = mteb.MTEB(tasks=tasks)
+    prediction_folder = None
+    if save_predictions:
+        prediction_folder = os.path.join(output_dir, "predictions", model_name)
+        os.makedirs(prediction_folder, exist_ok=True)
+        logger.info("Saving MTEB predictions to %s", prediction_folder)
     results = evaluation.run(
         eval_model,
         output_folder=os.path.join(output_dir, model_name),
         batch_size=batch_size,
+        prediction_folder=prediction_folder,
+        overwrite_results=True,
     )
     return results
 
@@ -910,6 +918,7 @@ def main():
                             generic_instruction,
                             output_dir,
                             batch_size,
+                            save_predictions=dataset_cfg.get("save_predictions", False),
                         )
                         if results:
                             all_metrics["mteb"] = results

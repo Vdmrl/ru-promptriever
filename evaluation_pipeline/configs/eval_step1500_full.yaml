@@ -1,0 +1,49 @@
+name: "Step-1500 full paper-suite validation"
+output_dir: "./results_step1500_full"
+device: "cuda:0"
+dtype: "bfloat16"
+retrieval_top_k: 1000
+generic_instruction: ""
+
+models:
+  - name: "4b-pretrain-step-1500"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-pretrained"
+    revision: "01501be5bcf18b5e71a916be777e2416e8a83674"
+    batch_size: 4
+    max_length: 512
+
+datasets:
+  - name: "synthetic_test"
+    type: "synthetic_test"
+    data_path: "Vladimirlv/ru-promptriever-dataset-v0.1"
+    split: "test"
+    metrics: ["ndcg_at_20", "p_mrr"]
+
+  - name: "mfollowir_ru"
+    type: "mfollowir"
+    data_path: "jhu-clsp/mFollowIR"
+    metrics: ["ndcg_at_20", "p_mrr"]
+
+  - name: "rumteb_retrieval"
+    type: "rumteb"
+    task_names: ["RuBQRetrieval"]
+    metrics: ["ndcg_at_10"]
+
+  - name: "en_mteb_retrieval"
+    type: "en_mteb"
+    task_names: ["SciFact", "NFCorpus"]
+    metrics: ["ndcg_at_10"]
+
+  - name: "instructir"
+    type: "en_mteb"
+    save_predictions: true
+    task_names: ["InstructIR"]
+
+  - name: "followir_eng"
+    type: "en_mteb"
+    save_predictions: true
+    task_names:
+      - "Robust04InstructionRetrieval"
+      - "Core17InstructionRetrieval"
+      - "News21InstructionRetrieval"

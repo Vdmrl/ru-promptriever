@@ -1,0 +1,46 @@
+name: "FollowIR paired significance evaluation"
+output_dir: "./results_followir_significance"
+device: "cuda:0"
+dtype: "bfloat16"
+retrieval_top_k: 1000
+generic_instruction: ""
+
+# These revisions reproduce the checkpoints used for the paper tables.
+models:
+  - name: "ru-only-paper"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v2"
+    revision: "a0d174daf820689c61fd86249c759f88d0e44a7e"
+    query_prefix: "query:  "
+    passage_prefix: "passage:  "
+    append_eos: true
+    batch_size: 4
+    max_length: 512
+
+  - name: "promptriever-8b-paper"
+    type: "causal_lm"
+    model_name_or_path: "samaya-ai/promptriever-llama3.1-8b-v1"
+    query_prefix: "query:  "
+    passage_prefix: "passage:  "
+    append_eos: true
+    batch_size: 4
+    max_length: 512
+
+  - name: "ru-en-paper"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v3"
+    revision: "e51c0133ad5a67c9c374aa97eddc008037d45e29"
+    query_prefix: "query:  "
+    passage_prefix: "passage:  "
+    append_eos: true
+    batch_size: 4
+    max_length: 512
+
+datasets:
+  - name: "followir_eng"
+    type: "en_mteb"
+    save_predictions: true
+    task_names:
+      - "Robust04InstructionRetrieval"
+      - "Core17InstructionRetrieval"
+      - "News21InstructionRetrieval"
