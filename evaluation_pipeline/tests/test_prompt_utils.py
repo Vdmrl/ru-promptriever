@@ -57,6 +57,17 @@ class ResolvePromptNameTest(unittest.TestCase):
     def test_plain_iterable_materialization(self):
         self.assertEqual(materialize_texts(iter(["a", "b"])), ["a", "b"])
 
+    def test_legacy_document_separator_can_be_reconstructed(self):
+        batch = {
+            "text": ["Title body", "body only"],
+            "title": ["Title", ""],
+            "body": ["body", "body only"],
+        }
+        self.assertEqual(
+            _batch_texts(batch, document_title_separator=". "),
+            ["Title. body", "body only"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

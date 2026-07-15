@@ -1,0 +1,28 @@
+name: "mFollowIR legacy document-format diagnostic"
+device: "cuda:0"
+dtype: "bfloat16"
+output_dir: "./results_mfollowir_legacy_document_diagnostic"
+retrieval_top_k: 1000
+generic_instruction: ""
+
+# Diagnostic only.  This is the exact paper checkpoint and official mFollowIR
+# candidate set, but documents reproduce the old custom pipeline's
+# ``title + '. ' + text`` formatting instead of MTEB's ``title + ' ' + text``.
+models:
+  - name: "ru-promptriever-qwen3-4b-legacy-doc-format"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v3"
+    revision: "e51c0133ad5a67c9c374aa97eddc008037d45e29"
+    base_revision: "1cfa9a7208912126459214e8b04321603b3df60c"
+    batch_size: 4
+    max_length: 512
+    append_eos: true
+    mteb_document_title_separator: ". "
+
+datasets:
+  - name: "mfollowir_ru"
+    type: "mfollowir"
+    data_path: "jhu-clsp/mFollowIR"
+    revision: "09eecbe45c54b4a6dfb8e68e345cae77337768e2"
+    save_predictions: true
+    metrics: ["ndcg_at_20", "p_mrr"]

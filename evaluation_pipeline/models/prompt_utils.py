@@ -6,11 +6,31 @@ from collections.abc import Iterable
 from typing import Any, Optional
 
 
-def _batch_texts(batch: Any) -> list[str]:
+def _batch_texts(
+    batch: Any, document_title_separator: str | None = None
+) -> list[str]:
     """Extract strings from one MTEB/DataLoader text batch."""
     if isinstance(batch, str):
         return [batch]
     if isinstance(batch, dict):
+        # MTEB retrieval corpus batches retain the raw body and title in
+        # addition to their official prejoined ``text`` field.  This optional
+        # branch exists solely for controlled formatting diagnostics.
+        if document_title_separator is not None and "body" in batch:
+            bodies = batch["body"]
+            if isinstance(bodies, str):
+                bodies = [bodies]
+            titles = batch.get("title", [""] * len(bodies))
+            if isinstance(titles, str):
+                titles = [titles]
+            return [
+                (
+                    f"{title}{document_title_separator}{body}"
+                    if title
+                    else str(body)
+                )
+                for title, body in zip(titles, bodies)
+            ]
         for key in ("text", "sentence"):
             if key in batch:
                 value = batch[key]
@@ -25,7 +45,9 @@ def _batch_texts(batch: Any) -> list[str]:
     return [str(batch)]
 
 
-def materialize_texts(sentences: Any) -> list[str]:
+def materialize_texts(
+    sentences: Any, document_title_separator: str | None = None
+) -> list[str]:
     """Normalize ordinary iterables and MTEB DataLoaders to a string list."""
     if isinstance(sentences, str):
         return [sentences]
@@ -39,7 +61,11 @@ def materialize_texts(sentences: Any) -> list[str]:
     if TorchDataLoader and isinstance(sentences, TorchDataLoader):
         texts: list[str] = []
         for batch in sentences:
-            texts.extend(_batch_texts(batch))
+            texts.extend(
+                _batch_texts(
+                    batch, document_title_separator=document_title_separator
+                )
+            )
         return texts
 
     return [str(item) for item in sentences]
