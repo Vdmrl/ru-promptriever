@@ -5,14 +5,13 @@ dtype: "bfloat16"
 retrieval_top_k: 1000
 generic_instruction: ""
 
-# These revisions reproduce the checkpoints used for the paper tables.
+# These revisions reproduce the exact checkpoints used for the English table.
 models:
   - name: "ru-only-paper"
     type: "causal_lm"
     model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v2"
-    revision: "a0d174daf820689c61fd86249c759f88d0e44a7e"
-    query_prefix: "query:  "
-    passage_prefix: "passage:  "
+    revision: "fc758b4b8fa5c963013d2f05b78aa77355f6131b"
+    base_revision: "1cfa9a7208912126459214e8b04321603b3df60c"
     append_eos: true
     batch_size: 4
     max_length: 512
@@ -20,6 +19,8 @@ models:
   - name: "promptriever-8b-paper"
     type: "causal_lm"
     model_name_or_path: "samaya-ai/promptriever-llama3.1-8b-v1"
+    revision: "2ead22cfb1b0e0c519c371c63c2ab90ffc511b8a"
+    base_revision: "48d6d0fc4e02fb1269b36940650a1b7233035cbb"
     query_prefix: "query:  "
     passage_prefix: "passage:  "
     append_eos: true
@@ -31,6 +32,8 @@ models:
   - name: "promptriever-7b-published"
     type: "causal_lm"
     model_name_or_path: "samaya-ai/promptriever-llama2-7b-v1"
+    revision: "30b14e3813c0fa45facfd01a594580c3fe5ecf23"
+    base_revision: "01c7f73d771dfac7d292323805ebc428287df4f9"
     query_prefix: "query:  "
     passage_prefix: "passage:  "
     append_eos: true
@@ -40,9 +43,10 @@ models:
   - name: "ru-en-paper"
     type: "causal_lm"
     model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v3"
-    revision: "e51c0133ad5a67c9c374aa97eddc008037d45e29"
-    query_prefix: "query:  "
-    passage_prefix: "passage:  "
+    # The English table was evaluated before the repository was replaced by
+    # the mFollowIR-selected step-300 weights on 2026-07-13.
+    revision: "25a22d54b2aa415ebd6d1a0e672f68bc1e4586ae"
+    base_revision: "1cfa9a7208912126459214e8b04321603b3df60c"
     append_eos: true
     batch_size: 4
     max_length: 512

@@ -15,6 +15,7 @@ from mteb import EncoderProtocol
 from sentence_transformers import SentenceTransformer
 
 from .base import BaseRetriever
+from .prompt_utils import resolve_prompt_name
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,8 @@ class Qwen3EmbeddingRetriever(EncoderProtocol, BaseRetriever):
         Returns:
             np.ndarray of shape [len(sentences), hidden_dim], L2-normalized.
         """
+        prompt_name = resolve_prompt_name(prompt_name, kwargs.get("prompt_type"))
+
         # MTEB evaluate_dense_custom passes "passage" for documents
         # but Qwen models use "document" as the prompt name
         if prompt_name == "passage":

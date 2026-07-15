@@ -10,6 +10,8 @@ models:
     type: "causal_lm"
     model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-pretrained"
     revision: "01501be5bcf18b5e71a916be777e2416e8a83674"
+    base_revision: "1cfa9a7208912126459214e8b04321603b3df60c"
+    append_eos: true
     batch_size: 4
     max_length: 512
 

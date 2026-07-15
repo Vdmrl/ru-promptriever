@@ -21,6 +21,7 @@ from tqdm import trange
 from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
 
 from .base import BaseRetriever
+from .prompt_utils import apply_role_prefix, resolve_prompt_name
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ def _last_token_pool(
     ]
 
 
-def _is_peft_model(model_name_or_path: str) -> bool:
+def _is_peft_model(model_name_or_path: str, revision: Optional[str] = None) -> bool:
     """Check if the model is a PEFT/LoRA model with actual adapter weights.
 
     Merged models may retain a leftover adapter_config.json without adapter
@@ -46,7 +47,7 @@ def _is_peft_model(model_name_or_path: str) -> bool:
     try:
         from peft import PeftConfig
 
-        PeftConfig.from_pretrained(model_name_or_path)
+        PeftConfig.from_pretrained(model_name_or_path, revision=revision)
     except Exception:
         return False
 
@@ -63,7 +64,7 @@ def _is_peft_model(model_name_or_path: str) -> bool:
     try:
         from huggingface_hub import repo_info
 
-        info = repo_info(model_name_or_path)
+        info = repo_info(model_name_or_path, revision=revision)
         filenames = {f.rfilename for f in info.siblings}
         has_adapter_weights = (
             "adapter_model.safetensors" in filenames
@@ -79,7 +80,9 @@ def _is_peft_model(model_name_or_path: str) -> bool:
         return True
 
 
-def _detect_peft_base_class(model_name_or_path: str):
+def _detect_peft_base_class(
+    model_name_or_path: str, revision: Optional[str] = None
+):
     """Detect whether PEFT adapter was trained on AutoModel or AutoModelForCausalLM.
 
     Inspects adapter weight key prefixes:
@@ -100,10 +103,12 @@ def _detect_peft_base_class(model_name_or_path: str):
 
         try:
             adapter_path = hf_hub_download(
-                model_name_or_path, "adapter_model.safetensors"
+                model_name_or_path, "adapter_model.safetensors", revision=revision
             )
         except Exception:
-            adapter_path = hf_hub_download(model_name_or_path, "adapter_model.bin")
+            adapter_path = hf_hub_download(
+                model_name_or_path, "adapter_model.bin", revision=revision
+            )
 
     # Read keys without loading tensors
     if adapter_path.endswith(".safetensors"):
@@ -144,9 +149,12 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         query_prefix: str = "",
         passage_prefix: str = "",
         append_eos: Optional[bool] = None,
+        revision: Optional[str] = None,
+        base_revision: Optional[str] = None,
         **kwargs,
     ):
         self._mteb_model_meta = None
+        self._logged_prompt_roles = set()
         self.max_length = max_length
         self.generic_instruction = generic_instruction
         self.device = device
@@ -159,28 +167,44 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         torch_dtype = getattr(torch, dtype, torch.bfloat16)
         self._is_peft = False  # Will be set to True if PEFT model detected
         logger.info(f"Loading CausalLM: {model_name_or_path} ({dtype})")
+        logger.info(
+            "Pinned model protocol: adapter_revision=%r, base_revision=%r, "
+            "query_prefix=%r, passage_prefix=%r, append_eos=%r",
+            revision,
+            base_revision,
+            query_prefix,
+            passage_prefix,
+            append_eos,
+        )
 
-        if _is_peft_model(model_name_or_path):
+        if _is_peft_model(model_name_or_path, revision=revision):
             self._is_peft = True
             logger.info(
                 "Detected PEFT/LoRA model. Loading base model + merging LoRA..."
             )
             from peft import PeftConfig, PeftModel
 
-            peft_config = PeftConfig.from_pretrained(model_name_or_path)
+            peft_config = PeftConfig.from_pretrained(
+                model_name_or_path, revision=revision
+            )
 
             base_model_name = peft_config.base_model_name_or_path
             logger.info(f"Base model: {base_model_name}")
 
-            base_cls = _detect_peft_base_class(model_name_or_path)
+            base_cls = _detect_peft_base_class(
+                model_name_or_path, revision=revision
+            )
             base_model = base_cls.from_pretrained(
                 base_model_name,
                 torch_dtype=torch_dtype,
                 device_map="auto",
                 trust_remote_code=True,
+                revision=base_revision,
             )
             self.tokenizer = AutoTokenizer.from_pretrained(
-                base_model_name, trust_remote_code=True
+                base_model_name,
+                trust_remote_code=True,
+                revision=base_revision,
             )
 
             # Resolve accelerate/PEFT compatibility issue where no_split_module_classes
@@ -209,7 +233,6 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
                 peft.peft_model.get_balanced_memory = patched_get_balanced_memory
 
             try:
-                revision = kwargs.pop("revision", None)
                 self.model = PeftModel.from_pretrained(
                     base_model, model_name_or_path, config=peft_config, revision=revision
                 )
@@ -221,7 +244,6 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
             self.model = self.model.merge_and_unload()
             self.model.eval()
         else:
-            revision = kwargs.pop("revision", None)
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_name_or_path, trust_remote_code=True, revision=revision
             )
@@ -305,11 +327,32 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
                     texts.append(str(batch))
             sentences = texts
 
+        # MTEB 2.10+ uses ``prompt_type`` (PromptType.query/document), while
+        # the custom evaluation path historically uses ``prompt_name``
+        # ("query"/"passage").  Normalize both APIs before applying prefixes.
+        prompt_name = resolve_prompt_name(prompt_name, kwargs.get("prompt_type"))
+
+        if prompt_name not in self._logged_prompt_roles:
+            prefix = (
+                self.query_prefix
+                if prompt_name == "query"
+                else self.passage_prefix if prompt_name == "passage" else ""
+            )
+            logger.info(
+                "Encoding prompt role=%r (MTEB prompt_type=%r), prefix=%r",
+                prompt_name,
+                kwargs.get("prompt_type"),
+                prefix,
+            )
+            self._logged_prompt_roles.add(prompt_name)
+
         # Apply query/passage prefix if configured (e.g. Promptriever uses "query:  ")
-        if prompt_name == "query" and self.query_prefix:
-            sentences = [f"{self.query_prefix}{s}" for s in sentences]
-        elif prompt_name == "passage" and self.passage_prefix:
-            sentences = [f"{self.passage_prefix}{s}" for s in sentences]
+        sentences = apply_role_prefix(
+            sentences,
+            prompt_name,
+            query_prefix=self.query_prefix,
+            passage_prefix=self.passage_prefix,
+        )
 
         all_embeddings = []
 

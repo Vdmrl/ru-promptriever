@@ -15,6 +15,7 @@ from mteb import EncoderProtocol
 from sentence_transformers import SentenceTransformer
 
 from .base import BaseRetriever
+from .prompt_utils import resolve_prompt_name
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +150,7 @@ class GigaEmbeddingRetriever(EncoderProtocol, BaseRetriever):
         Returns:
             np.ndarray of shape [len(sentences), hidden_dim], L2-normalized.
         """
+        prompt_name = resolve_prompt_name(prompt_name, kwargs.get("prompt_type"))
         prompt = self.query_prompt if prompt_name == "query" else ""
 
         # MTEB 2.10+ may pass a DataLoader instead of List[str]

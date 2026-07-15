@@ -14,6 +14,7 @@ from mteb import EncoderProtocol
 from sentence_transformers import SentenceTransformer
 
 from .base import BaseRetriever
+from .prompt_utils import resolve_prompt_name
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,8 @@ class EncoderRetriever(EncoderProtocol, BaseRetriever):
                 else:
                     texts.append(str(batch))
             sentences = texts
+
+        prompt_name = resolve_prompt_name(prompt_name, kwargs.get("prompt_type"))
 
         if prompt_name == "query" and self.query_prefix:
             sentences = [f"{self.query_prefix}{s}" for s in sentences]

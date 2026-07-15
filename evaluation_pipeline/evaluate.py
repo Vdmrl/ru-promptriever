@@ -32,6 +32,7 @@ import numpy as np
 
 from models.bm25_retriever import BM25Retriever
 from models.promptriever_retriever import CausalLMRetriever
+from models.prompt_utils import resolve_prompt_name
 from models.encoder_retriever import EncoderRetriever
 from models.giga_embedding_retriever import GigaEmbeddingRetriever
 from models.qwen3_embedding_retriever import Qwen3EmbeddingRetriever
@@ -122,6 +123,7 @@ def load_model(model_cfg: dict, global_cfg: dict):
             query_prefix=model_cfg.get("query_prefix", ""),
             passage_prefix=model_cfg.get("passage_prefix", ""),
             append_eos=model_cfg.get("append_eos"),
+            base_revision=model_cfg.get("base_revision"),
         )
 
     elif model_type == "qwen3_embedding":
@@ -566,8 +568,8 @@ def evaluate_dense_custom(
 class CausalLMRetrieverWithInstruction(mteb.EncoderProtocol):
     """Wrapper that injects a generic instruction into queries for MTEB.
 
-    MTEB calls model.encode(sentences, prompt_name="query") for queries.
-    This wrapper intercepts "query" calls and appends the instruction.
+    MTEB 2.10 identifies queries with ``prompt_type``.  Custom evaluation
+    paths use ``prompt_name``.  This wrapper accepts both conventions.
     """
 
     def __init__(self, base_model: CausalLMRetriever):
@@ -583,10 +585,16 @@ class CausalLMRetrieverWithInstruction(mteb.EncoderProtocol):
         self.base_model.mteb_model_meta = value
 
     def encode(self, sentences, batch_size=32, prompt_name=None, **kwargs):
-        if prompt_name == "query":
+        resolved_prompt_name = resolve_prompt_name(
+            prompt_name, kwargs.get("prompt_type")
+        )
+        if resolved_prompt_name == "query":
             sentences = [f"{s} {self.generic_instruction}" for s in sentences]
         return self.base_model.encode(
-            sentences, batch_size=batch_size, prompt_name=prompt_name, **kwargs
+            sentences,
+            batch_size=batch_size,
+            prompt_name=resolved_prompt_name,
+            **kwargs,
         )
 
     def similarity(self, e1, e2):
