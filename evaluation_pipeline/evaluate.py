@@ -20,8 +20,6 @@ Usage:
 """
 
 import argparse
-import gzip
-import json
 import logging
 import os
 from typing import Dict, List, Optional
@@ -32,14 +30,20 @@ import numpy as np
 
 from models.bm25_retriever import BM25Retriever
 from models.promptriever_retriever import CausalLMRetriever
-from models.prompt_utils import resolve_prompt_name
+from models.prompt_utils import materialize_texts, resolve_prompt_name
 from models.encoder_retriever import EncoderRetriever
 from models.giga_embedding_retriever import GigaEmbeddingRetriever
 from models.qwen3_embedding_retriever import Qwen3EmbeddingRetriever
-from tasks.mfollowir_ru_task import MFollowIRRuRetrieval
-from tasks.pmrr import compute_pmrr, compute_pmrr_per_query
+from tasks.pmrr import compute_pmrr
 from tasks.synthetic_test_task import RuPrompTrieverTestRetrieval
 from utils.data_utils import load_config, print_summary_table, print_intermediate_result, save_results
+from utils.run_manifest import (
+    find_matching_result,
+    git_revision,
+    protocol_fingerprint,
+    protocol_payload,
+    write_run_manifest,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -158,10 +162,37 @@ def load_tasks(dataset_cfg: dict) -> List:
     ds_type = dataset_cfg["type"]
 
     if ds_type == "synthetic_test":
-        return [RuPrompTrieverTestRetrieval()]
+        required = ("data_path", "revision", "instruction_negative_field")
+        missing = [key for key in required if not dataset_cfg.get(key)]
+        if missing:
+            raise ValueError(
+                "Synthetic-test config must explicitly set " + ", ".join(missing)
+            )
+        return [
+            RuPrompTrieverTestRetrieval(
+                dataset_path=dataset_cfg["data_path"],
+                revision=dataset_cfg["revision"],
+                instruction_negative_field=dataset_cfg["instruction_negative_field"],
+            )
+        ]
 
     elif ds_type == "mfollowir":
-        return [MFollowIRRuRetrieval()]
+        # Use MTEB's pinned InstructionReranking implementation.  It reranks
+        # each query's official 1,000 candidates and computes nDCG on the
+        # original instruction plus p-MRR across the original/changed pair.
+        tasks = mteb.get_tasks(tasks=["mFollowIR"], languages=["rus"])
+        loaded = list(tasks)
+        if len(loaded) != 1:
+            raise RuntimeError(f"Expected one Russian mFollowIR task, got {len(loaded)}")
+        task = loaded[0]
+        expected_revision = dataset_cfg.get("revision")
+        actual_revision = task.metadata.dataset.get("revision")
+        if expected_revision and expected_revision != actual_revision:
+            raise ValueError(
+                f"Configured mFollowIR revision {expected_revision} does not match "
+                f"MTEB 2.10.5 revision {actual_revision}"
+            )
+        return loaded
 
     elif ds_type == "rumteb":
         task_names = dataset_cfg.get("task_names", [])
@@ -193,7 +224,7 @@ def prepare_queries_for_model(
     """Adjust queries based on model type and dataset type.
 
     Rules:
-      - synthetic_test / mfollowir: queries already contain instructions
+      - synthetic_test: queries already contain instructions
         (baked into the query text). ALL models receive the same queries
         (this is the standard FollowIR protocol — p-MRR measures sensitivity).
 
@@ -250,83 +281,6 @@ def compute_retrieval_metrics(
     return avg_metrics
 
 
-def compute_retrieval_metrics_per_query(
-    qrels: Dict[str, Dict[str, int]],
-    results: Dict[str, Dict[str, float]],
-    metrics: List[str] = ("ndcg_cut_20",),
-) -> Dict[str, Dict[str, float]]:
-    """Compute retrieval metrics separately for every query topic."""
-    import pytrec_eval
-
-    evaluator = pytrec_eval.RelevanceEvaluator(qrels, set(metrics))
-    scores = evaluator.evaluate(results)
-    return {
-        str(qid): {str(metric): float(value) for metric, value in values.items()}
-        for qid, values in scores.items()
-    }
-
-
-def save_mfollowir_detailed_artifacts(
-    output_dir: str,
-    model_name: str,
-    dataset_name: str,
-    task: MFollowIRRuRetrieval,
-    retrieval_results: Dict[str, Dict[str, float]],
-) -> Dict[str, str]:
-    """Save run-level and topic-level mFollowIR artifacts for paired tests."""
-    task.load_data()
-    qrels = task.relevant_docs["test"]
-    changed_results = {
-        qid: docs for qid, docs in retrieval_results.items() if qid.endswith("-changed")
-    }
-    changed_qrels = {qid: docs for qid, docs in qrels.items() if qid.endswith("-changed")}
-    ndcg_by_query = compute_retrieval_metrics_per_query(
-        changed_qrels, changed_results, metrics=("ndcg_cut_20",)
-    )
-
-    original_results = {
-        qid: docs for qid, docs in retrieval_results.items() if qid.endswith("-og")
-    }
-    pmrr_by_query = compute_pmrr_per_query(
-        original_results,
-        changed_results,
-        task.get_qrel_diff(),
-    )
-
-    bare_ids = sorted(
-        set(qid.removesuffix("-changed") for qid in ndcg_by_query) | set(pmrr_by_query)
-    )
-    per_query = {}
-    for qid in bare_ids:
-        changed_qid = f"{qid}-changed"
-        row = {}
-        if changed_qid in ndcg_by_query:
-            row["ndcg_cut_20"] = ndcg_by_query[changed_qid]["ndcg_cut_20"]
-        if qid in pmrr_by_query:
-            row["p_mrr"] = pmrr_by_query[qid]
-        per_query[qid] = row
-
-    os.makedirs(output_dir, exist_ok=True)
-    stem = f"{model_name}__{dataset_name}"
-    per_query_path = os.path.join(output_dir, f"{stem}__per_query.json")
-    run_path = os.path.join(output_dir, f"{stem}__run.json.gz")
-
-    payload = {
-        "model": model_name,
-        "dataset": dataset_name,
-        "n_topics": len(per_query),
-        "per_query": per_query,
-    }
-    with open(per_query_path, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
-    with gzip.open(run_path, "wt", encoding="utf-8") as handle:
-        json.dump(retrieval_results, handle, ensure_ascii=False, sort_keys=True)
-
-    logger.info("Saved mFollowIR per-query metrics: %s", per_query_path)
-    logger.info("Saved mFollowIR run: %s", run_path)
-    return {"per_query": per_query_path, "run": run_path}
-
-
 # ---------------------------------------------------------------------------
 # BM25 evaluation
 # ---------------------------------------------------------------------------
@@ -372,7 +326,7 @@ def _hf_dataset_to_qrels(raw) -> Dict[str, Dict[str, int]]:
 def _extract_task_data(task, split="test"):
     """Extract corpus/queries/relevant_docs from both custom and MTEB built-in tasks.
 
-    Our custom tasks (synthetic_test, mfollowir) set task.corpus/queries/relevant_docs
+    The custom synthetic task sets task.corpus/queries/relevant_docs
     as plain Python dicts keyed by split (e.g. task.corpus["test"]).
     MTEB 1.14+ built-in tasks store them in task.dataset[subset][split].
     """
@@ -486,20 +440,12 @@ def evaluate_bm25(
     model.index_corpus(corpus)
     results = model.retrieve(queries, top_k=top_k)
 
-    # For mFollowIR, compute ndcg only on changed queries (-changed suffix)
-    if isinstance(task, MFollowIRRuRetrieval):
-        changed_results = {qid: r for qid, r in results.items() if qid.endswith("-changed")}
-        changed_qrels = {
-            qid: q for qid, q in relevant_docs.items() if qid.endswith("-changed")
-        }
-        metrics = compute_retrieval_metrics(changed_qrels, changed_results)
-    else:
-        metrics = compute_retrieval_metrics(relevant_docs, results)
+    metrics = compute_retrieval_metrics(relevant_docs, results)
     return metrics
 
 
 # ---------------------------------------------------------------------------
-# Dense model evaluation (custom path for synthetic_test / mfollowir)
+# Dense model evaluation (custom path for synthetic_test)
 # ---------------------------------------------------------------------------
 
 
@@ -513,7 +459,7 @@ def evaluate_dense_custom(
     top_k: int = 1000,
     max_queries: int = None,
 ) -> Dict:
-    """Evaluate a dense model on a custom task (synthetic_test, mfollowir).
+    """Evaluate a dense model on the versioned synthetic test.
 
     Handles query preparation and metric computation manually.
     """
@@ -536,27 +482,18 @@ def evaluate_dense_custom(
         corpus = _trim_corpus_for_smoke_test(corpus, relevant_docs)
 
     # GigaEmbeddings wraps queries with a task-description prefix via prompt_name="query".
-    # On instruction-following datasets (mfollowir, synthetic_test) queries already embed
+    # On the synthetic instruction-following dataset queries already embed
     # the full task instruction, so suppress this extra wrapping only for giga_embedding.
     # CausalLM models (Promptriever) use prompt_name="query" for a format token ("query: ")
     # that must always be applied regardless of dataset type.
-    if dataset_type in ("mfollowir", "synthetic_test") and model_type == "giga_embedding":
+    if dataset_type == "synthetic_test" and model_type == "giga_embedding":
         query_prompt_name = None
     else:
         query_prompt_name = "query"
 
     results = _dense_retrieve(model, queries, corpus, batch_size, top_k, query_prompt_name)
 
-    # For mFollowIR, compute ndcg only on changed queries (-changed suffix)
-    # Original queries (-og) are only used for p-MRR comparison
-    if isinstance(task, MFollowIRRuRetrieval):
-        changed_results = {qid: r for qid, r in results.items() if qid.endswith("-changed")}
-        changed_qrels = {
-            qid: q for qid, q in relevant_docs.items() if qid.endswith("-changed")
-        }
-        metrics = compute_retrieval_metrics(changed_qrels, changed_results)
-    else:
-        metrics = compute_retrieval_metrics(relevant_docs, results)
+    metrics = compute_retrieval_metrics(relevant_docs, results)
     return results, metrics
 
 
@@ -589,7 +526,10 @@ class CausalLMRetrieverWithInstruction(mteb.EncoderProtocol):
             prompt_name, kwargs.get("prompt_type")
         )
         if resolved_prompt_name == "query":
-            sentences = [f"{s} {self.generic_instruction}" for s in sentences]
+            sentences = [
+                f"{text.rstrip()} {self.generic_instruction}".strip()
+                for text in materialize_texts(sentences)
+            ]
         return self.base_model.encode(
             sentences,
             batch_size=batch_size,
@@ -640,15 +580,28 @@ def evaluate_with_mteb(
     eval_model = model
     # InstructionRetrieval tasks already embed instructions in query text —
     # wrapping would double-inject (and in the wrong language for cross-lingual).
-    is_instruction_task = any(
-        getattr(t.metadata, "type", "") in ("InstructionRetrieval", "InstructionReranking")
+    instruction_flags = [
+        getattr(t.metadata, "type", "")
+        in ("InstructionRetrieval", "InstructionReranking")
         for t in tasks
-    )
-    if model_type == "causal_lm" and dataset_type in ("rumteb", "en_mteb") and not is_instruction_task:
+    ]
+    if any(instruction_flags) and not all(instruction_flags):
+        raise ValueError(
+            "Do not mix instruction and plain retrieval tasks in one dataset config"
+        )
+    is_instruction_task = bool(instruction_flags and all(instruction_flags))
+    if (
+        model_type == "causal_lm"
+        and dataset_type in ("rumteb", "en_mteb")
+        and not is_instruction_task
+        and generic_instruction.strip()
+    ):
         logger.info(
             f'Wrapping CausalLM with generic instruction: "{generic_instruction}"'
         )
         eval_model = CausalLMRetrieverWithInstruction(model)
+    elif model_type == "causal_lm" and not is_instruction_task:
+        logger.info("Generic instruction is empty; using plain queries unchanged.")
     elif is_instruction_task:
         logger.info(
             "Skipping generic instruction wrapper — InstructionRetrieval tasks "
@@ -691,30 +644,15 @@ def evaluate_pmrr_synthetic(
 ) -> float:
     """Compute p-MRR from pre-computed retrieval results.
 
-    For MFollowIRRuRetrieval: uses the official qrel_diff approach
-    (documents whose relevance changed between original and changed
-    instructions).
-
-    For RuPrompTrieverTestRetrieval: the task does not have qrel_diff,
-    so we fall back to computing changed docs from the qrels directly.
+    The versioned synthetic task does not expose qrel_diff, so changed
+    documents are derived from its paired qrels.
     """
     pairs = task.get_query_pairs()
     if not pairs:
         logger.warning("No query pairs found for p-MRR computation.")
         return 0.0
 
-    # --- mFollowIR path: use official qrel_diff ---
-    if isinstance(task, MFollowIRRuRetrieval):
-        qrel_diff = task.get_qrel_diff()
-        og_results = {qid: r for qid, r in all_results.items() if qid.endswith("-og")}
-        changed_results = {qid: r for qid, r in all_results.items() if qid.endswith("-changed")}
-        return compute_pmrr(
-            results_original=og_results,
-            results_changed=changed_results,
-            qrel_diff=qrel_diff,
-        )
-
-    # --- Synthetic test path: derive qrel_diff from qrels ---
+    # Derive qrel_diff from the paired synthetic qrels.
     # For synthetic test, changed docs = instruction negatives
     # (docs relevant to standard query but not to instructed query)
     split = "test"
@@ -765,7 +703,7 @@ def _dense_retrieve(
 
     Args:
         query_prompt_name: Passed as prompt_name when encoding queries. Set to
-            None for instruction-following datasets (mfollowir, synthetic_test)
+            None for custom instruction-following datasets such as synthetic_test
             where task-specific prompts are already embedded in the query text.
     """
     query_ids = list(queries.keys())
@@ -852,7 +790,7 @@ def main():
     parser.add_argument(
         "--no-summary",
         action="store_true",
-        help="Do not print the cumulative results table at the end of the run.",
+        help="Do not print intermediate or cumulative result tables.",
     )
 
     args = parser.parse_args()
@@ -865,6 +803,16 @@ def main():
         "generic_instruction", "Найди релевантный документ."
     )
     retrieval_top_k = config.get("retrieval_top_k", 1000)
+
+    requested_device = str(config.get("device", "cuda:0"))
+    if requested_device.startswith("cuda"):
+        import torch
+
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                f"Config requests {requested_device}, but PyTorch cannot access CUDA. "
+                "Fix the PyTorch/CUDA installation before starting evaluation."
+            )
 
     # Filter models
     models_cfg = config.get("models", [])
@@ -890,6 +838,13 @@ def main():
             )
         datasets_cfg = [d for d in datasets_cfg if d["name"] in args.datasets]
 
+    repository_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    code_revision = git_revision(repository_root)
+    manifest_path = write_run_manifest(
+        output_dir, args.config, config, code_revision
+    )
+    logger.info("Saved run manifest: %s", manifest_path)
+
     logger.info(f"Models to evaluate: {[m['name'] for m in models_cfg]}")
     logger.info(f"Datasets to evaluate: {[d['name'] for d in datasets_cfg]}")
 
@@ -911,23 +866,18 @@ def main():
         for dataset_cfg in datasets_cfg:
             dataset_name = dataset_cfg["name"]
             dataset_type = dataset_cfg["type"]
+            pair_protocol = protocol_payload(
+                config, model_cfg, dataset_cfg, code_revision
+            )
+            pair_fingerprint = protocol_fingerprint(pair_protocol)
 
             # --- Skip existing ---
             if args.skip_existing:
-                existing = (
-                    [
-                        f
-                        for f in os.listdir(output_dir)
-                        if f.startswith(f"{model_name}__{dataset_name}__")
-                        and f.endswith(".json")
-                    ]
-                    if os.path.exists(output_dir)
-                    else []
-                )
-                if existing:
+                existing = find_matching_result(output_dir, pair_fingerprint)
+                if existing is not None:
                     logger.info(
                         f"Skipping {model_name} on {dataset_name} "
-                        f"(found {len(existing)} existing result(s))"
+                        f"(matching protocol result: {existing})"
                     )
                     continue
 
@@ -937,9 +887,16 @@ def main():
                 tasks = load_tasks(dataset_cfg)
                 all_metrics = {}
 
-                if dataset_type in ("rumteb", "en_mteb"):
-                    # --- ruMTEB: use MTEB built-in evaluation ---
+                if dataset_type in ("rumteb", "en_mteb", "mfollowir"):
+                    # Use MTEB for built-in retrieval and instruction-reranking
+                    # tasks.  In particular, mFollowIR must retain its official
+                    # per-query candidate lists.
                     if model_type == "bm25":
+                        if dataset_type == "mfollowir":
+                            raise ValueError(
+                                "The local BM25 wrapper does not implement official "
+                                "mFollowIR candidate reranking"
+                            )
                         for task in tasks:
                             task_metrics = evaluate_bm25(
                                 model, task, top_k=retrieval_top_k, max_queries=args.max_queries
@@ -967,7 +924,7 @@ def main():
                             all_metrics["mteb"] = results
 
                 else:
-                    # --- synthetic_test / mfollowir: custom path ---
+                    # Versioned synthetic-test custom path.
                     for task in tasks:
                         if model_type == "bm25":
                             bm25_metrics = evaluate_bm25(
@@ -976,10 +933,7 @@ def main():
                             all_metrics["retrieval"] = bm25_metrics
 
                             # p-MRR for BM25: retrieve all queries using already-indexed corpus
-                            if isinstance(
-                                task,
-                                (RuPrompTrieverTestRetrieval, MFollowIRRuRetrieval),
-                            ):
+                            if isinstance(task, RuPrompTrieverTestRetrieval):
                                 task.load_data()
                                 queries = task.queries["test"]
                                 bm25_results = model.retrieve(queries, top_k=retrieval_top_k)
@@ -1000,24 +954,21 @@ def main():
                             all_metrics["retrieval"] = metrics
 
                             # p-MRR for dense models
-                            if isinstance(
-                                task,
-                                (RuPrompTrieverTestRetrieval, MFollowIRRuRetrieval),
-                            ):
+                            if isinstance(task, RuPrompTrieverTestRetrieval):
                                 pmrr = evaluate_pmrr_synthetic(task, retrieval_results)
                                 all_metrics["p_mrr"] = pmrr
                                 logger.info(f"p-MRR: {pmrr * 100:.2f} (raw: {pmrr:.4f})")
-                                if isinstance(task, MFollowIRRuRetrieval):
-                                    save_mfollowir_detailed_artifacts(
-                                        output_dir,
-                                        model_name,
-                                        dataset_name,
-                                        task,
-                                        retrieval_results,
-                                    )
 
-                save_results(all_metrics, model_name, dataset_name, output_dir)
-                print_intermediate_result(model_name, dataset_name, all_metrics)
+                save_results(
+                    all_metrics,
+                    model_name,
+                    dataset_name,
+                    output_dir,
+                    protocol_fingerprint=pair_fingerprint,
+                    protocol=pair_protocol,
+                )
+                if not args.no_summary:
+                    print_intermediate_result(model_name, dataset_name, all_metrics)
                 logger.info(f"✓ {model_name} on {dataset_name} completed.")
 
                 # Upload intermediate results

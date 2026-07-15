@@ -16,6 +16,8 @@ datasets:
   - name: "synthetic_test"
     type: "synthetic_test"
     data_path: "Vladimirlv/ru-promptriever-dataset-v0.1"
+    revision: "883a22f2043ecfba245644cd9a21c28085204285"
+    instruction_negative_field: "negative_passages"
     split: "test"
     metrics:
       - "ndcg_at_20"
@@ -24,6 +26,8 @@ datasets:
   - name: "mfollowir_ru"
     type: "mfollowir"
     data_path: "jhu-clsp/mFollowIR"
+    revision: "09eecbe45c54b4a6dfb8e68e345cae77337768e2"
+    save_predictions: true
     metrics:
       - "ndcg_at_20"
       - "p_mrr"

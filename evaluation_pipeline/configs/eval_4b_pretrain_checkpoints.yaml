@@ -80,6 +80,8 @@ datasets:
 - name: mfollowir_ru
   type: mfollowir
   data_path: jhu-clsp/mFollowIR
+  revision: 09eecbe45c54b4a6dfb8e68e345cae77337768e2
+  save_predictions: true
   metrics:
   - ndcg_at_20
   - p_mrr

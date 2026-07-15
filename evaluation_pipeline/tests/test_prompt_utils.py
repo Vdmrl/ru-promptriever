@@ -1,7 +1,12 @@
 from enum import Enum
 import unittest
 
-from evaluation_pipeline.models.prompt_utils import apply_role_prefix, resolve_prompt_name
+from evaluation_pipeline.models.prompt_utils import (
+    _batch_texts,
+    apply_role_prefix,
+    materialize_texts,
+    resolve_prompt_name,
+)
 
 
 class FakePromptType(Enum):
@@ -39,6 +44,18 @@ class ResolvePromptNameTest(unittest.TestCase):
             ),
             ["passage:  document"],
         )
+
+    def test_text_batch_is_not_stringified(self):
+        self.assertEqual(
+            _batch_texts({"text": ["first", "second"], "id": ["1", "2"]}),
+            ["first", "second"],
+        )
+
+    def test_single_batch_string_is_not_split_into_characters(self):
+        self.assertEqual(_batch_texts({"text": "whole sentence"}), ["whole sentence"])
+
+    def test_plain_iterable_materialization(self):
+        self.assertEqual(materialize_texts(iter(["a", "b"])), ["a", "b"])
 
 
 if __name__ == "__main__":

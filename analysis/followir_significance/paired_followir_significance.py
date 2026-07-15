@@ -51,7 +51,11 @@ def _task_split(task):
         str(qid): {str(doc): int(score) for doc, score in _as_plain_dict(docs).items()}
         for qid, docs in qrels.items()
     }
-    return subset, qrels
+    top_ranked = _as_plain_dict(split_data["top_ranked"])
+    top_ranked = {
+        str(qid): [str(doc) for doc in docs] for qid, docs in top_ranked.items()
+    }
+    return subset, qrels, top_ranked
 
 
 def _prediction_file(root: Path, task_name: str) -> Path:
@@ -96,6 +100,22 @@ def _rank_score(old_rank: int, new_rank: int) -> float:
     return 1.0 - ((1.0 / new_rank) / (1.0 / old_rank))
 
 
+def _validate_candidate_sets(run, top_ranked, label, task_name):
+    missing = sorted(set(top_ranked) - set(run))
+    extra = sorted(set(run) - set(top_ranked))
+    mismatched = []
+    for qid in sorted(set(run) & set(top_ranked)):
+        expected = set(top_ranked[qid])
+        observed = set(run[qid])
+        if expected != observed:
+            mismatched.append((qid, len(observed), len(expected)))
+    if missing or extra or mismatched:
+        raise ValueError(
+            f"{label}/{task_name} is not an official candidate reranking run: "
+            f"missing={missing[:3]}, extra={extra[:3]}, mismatched={mismatched[:3]}"
+        )
+
+
 def _qrel_diff(task) -> dict[str, list[str]]:
     ds = load_dataset(
         task.metadata.dataset["path"],
@@ -107,7 +127,7 @@ def _qrel_diff(task) -> dict[str, list[str]]:
 
 
 def _per_topic(task_name: str, task, run: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
-    _, qrels = _task_split(task)
+    _, qrels, _ = _task_split(task)
     qdiff = _qrel_diff(task)
     metric_name = "map_cut_1000" if task_name != "News21InstructionRetrieval" else "ndcg_cut_5"
     # The paper's FollowIR retrieval-quality columns use the original (``-og``)
@@ -207,9 +227,11 @@ def main() -> None:
 
     for task in tasks:
         name = task.metadata.name
-        subset, _ = _task_split(task)
+        subset, _, top_ranked = _task_split(task)
         run_a = _load_predictions(args.predictions_a, name, subset)
         run_b = _load_predictions(args.predictions_b, name, subset)
+        _validate_candidate_sets(run_a, top_ranked, args.label_a, name)
+        _validate_candidate_sets(run_b, top_ranked, args.label_b, name)
         per_a = _per_topic(name, task, run_a)
         per_b = _per_topic(name, task, run_b)
         common = sorted(set(per_a) & set(per_b))

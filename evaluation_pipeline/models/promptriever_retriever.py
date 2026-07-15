@@ -21,7 +21,7 @@ from tqdm import trange
 from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
 
 from .base import BaseRetriever
-from .prompt_utils import apply_role_prefix, resolve_prompt_name
+from .prompt_utils import apply_role_prefix, materialize_texts, resolve_prompt_name
 
 logger = logging.getLogger(__name__)
 
@@ -309,23 +309,7 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
     ) -> np.ndarray:
         """Encode sentences using last-token pooling + L2 normalization."""
         # MTEB 2.10+ passes sentences as a DataLoader — extract raw strings
-        from torch.utils.data import DataLoader as TorchDataLoader
-
-        if isinstance(sentences, TorchDataLoader):
-            texts = []
-            for batch in sentences:
-                if isinstance(batch, dict):
-                    batch_texts = batch.get("text", batch.get("sentence", []))
-                    texts.extend(
-                        batch_texts
-                        if isinstance(batch_texts, list)
-                        else list(batch_texts)
-                    )
-                elif isinstance(batch, (list, tuple)):
-                    texts.extend(batch)
-                else:
-                    texts.append(str(batch))
-            sentences = texts
+        sentences = materialize_texts(sentences)
 
         # MTEB 2.10+ uses ``prompt_type`` (PromptType.query/document), while
         # the custom evaluation path historically uses ``prompt_name``

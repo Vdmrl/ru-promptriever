@@ -1,7 +1,10 @@
 """
 Custom MTEB Task for the test split of the ru-promptriever-dataset.
 
-Dataset: Vladimirlv/ru-promptriever-dataset-v0.1 (test.parquet)
+The dataset repository, immutable revision, and instruction-negative field are
+explicit protocol parameters.  The paper-era v0.1 data stores them in
+``negative_passages``; the released production data stores them in
+``new_negatives``.  These variants must never be mixed silently.
 
 The test split contains query pairs:
   - Standard queries (query_id → only_query)
@@ -37,8 +40,8 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
             "instruction-augmented query pairs."
         ),
         dataset={
-            "path": "Vladimirlv/ru-promptriever-dataset",
-            "revision": "main",
+            "path": "Vladimirlv/ru-promptriever-dataset-v0.1",
+            "revision": "883a22f2043ecfba245644cd9a21c28085204285",
         },
         type="Retrieval",
         category="t2t",
@@ -56,6 +59,27 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
         sample_creation="LM-generated and verified",
         bibtex_citation="",
     )
+
+    def __init__(
+        self,
+        dataset_path: str = "Vladimirlv/ru-promptriever-dataset-v0.1",
+        revision: str = "883a22f2043ecfba245644cd9a21c28085204285",
+        instruction_negative_field: str = "negative_passages",
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        if not revision or revision == "main":
+            raise ValueError(
+                "Synthetic-test evaluation requires an immutable dataset revision"
+            )
+        if instruction_negative_field not in ("negative_passages", "new_negatives"):
+            raise ValueError(
+                "instruction_negative_field must be 'negative_passages' or "
+                "'new_negatives'"
+            )
+        self.dataset_path = dataset_path
+        self.dataset_revision = revision
+        self.instruction_negative_field = instruction_negative_field
 
     def load_data(self, **kwargs):
         """Load corpus from test_corpus.parquet and queries/relevance from test.parquet.
@@ -77,7 +101,7 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
 
         from huggingface_hub import hf_hub_download
 
-        dataset_path = self.metadata.dataset["path"]
+        dataset_path = self.dataset_path
 
         # --- Download only the two files we need ---
         logger.info("Downloading test_corpus.parquet from HuggingFace...")
@@ -85,6 +109,7 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
             repo_id=dataset_path,
             filename="test_corpus.parquet",
             repo_type="dataset",
+            revision=self.dataset_revision,
         )
 
         logger.info("Downloading test data from HuggingFace...")
@@ -92,6 +117,7 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
             repo_id=dataset_path,
             filename="data/test-00000-of-00001.parquet",
             repo_type="dataset",
+            revision=self.dataset_revision,
         )
 
         # --- Load corpus from test_corpus.parquet ---
@@ -142,7 +168,7 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
                 # These are docs relevant to the standard query but NOT to
                 # the instructed query — they should decrease in rank.
                 base_qid = q_id[: -len("-instruct")]
-                for passage in row.get("negative_passages", []) or []:
+                for passage in row.get(self.instruction_negative_field, []) or []:
                     doc_id = str(passage["docid"])
                     if doc_id not in relevant_docs[q_id]:
                         relevant_docs[q_id][doc_id] = 0
@@ -164,6 +190,24 @@ class RuPrompTrieverTestRetrieval(AbsTaskRetrieval):
                     if doc_id not in relevant_docs[base_qid]:
                         relevant_docs[base_qid][doc_id] = 1
 
+        pair_count = sum(1 for qid in queries if qid.endswith("-instruct"))
+        negative_count = sum(len(ids) for ids in instruction_negatives_by_pair.values())
+        if pair_count == 0:
+            raise ValueError("Synthetic test contains no standard/instructed query pairs")
+        if negative_count == 0:
+            raise ValueError(
+                f"Synthetic test field {self.instruction_negative_field!r} contains "
+                "no instruction negatives; check dataset version/schema"
+            )
+
+        logger.info(
+            "Synthetic protocol: dataset=%s revision=%s negative_field=%s pairs=%d negatives=%d",
+            self.dataset_path,
+            self.dataset_revision,
+            self.instruction_negative_field,
+            pair_count,
+            negative_count,
+        )
         logger.info(
             f"Loaded test queries: {len(queries)} queries, "
             f"{sum(1 for v in relevant_docs.values() for s in v.values() if s > 0)} "

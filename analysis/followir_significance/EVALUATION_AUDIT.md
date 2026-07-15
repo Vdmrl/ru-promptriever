@@ -96,10 +96,16 @@ the statistics must not be used until the protocol is audited again.
 
 ## mFollowIR-RU status
 
-The separate mFollowIR-RU evaluation uses the custom dense-retrieval path,
-which explicitly passed `prompt_name="query"` and `prompt_name="passage"` even
-before this fix. The step-300 Ru+En checkpoint produced p-MRR 18.54, closely
-matching the paper's 18.57, so there is no evidence that the MTEB role bug
-affected that result. Nevertheless, both the Ru+En and Promptriever-8B adapter
-and base revisions are now pinned in `eval_mfollowir_significance.yaml`; rerun
-both models before reporting the new paired confidence intervals.
+The legacy custom mFollowIR-RU path was not the official benchmark protocol.
+It retrieved over the union of 39,326 pooled documents, whereas mFollowIR is
+an `InstructionReranking` task with a separate list of 1,000 candidates for
+each query. It also reported nDCG@20 for the changed instruction rather than
+the original instruction. Matching the paper's old aggregate values therefore
+did not validate the benchmark implementation.
+
+The production evaluator now delegates mFollowIR entirely to MTEB 2.10.5's
+pinned `mFollowIR` task at revision
+`09eecbe45c54b4a6dfb8e68e345cae77337768e2`. Raw predictions are mandatory.
+The paired-analysis script refuses any run whose query/document sets do not
+exactly match the official candidate lists. All legacy custom-path mFollowIR
+aggregates and confidence intervals must be discarded and recomputed.

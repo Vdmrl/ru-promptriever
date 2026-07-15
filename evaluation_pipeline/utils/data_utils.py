@@ -42,6 +42,8 @@ def save_results(
     model_name: str,
     dataset_name: str,
     output_dir: str,
+    protocol_fingerprint: str | None = None,
+    protocol: Dict[str, Any] | None = None,
 ) -> str:
     """Save evaluation results to a JSON file.
 
@@ -66,6 +68,8 @@ def save_results(
                 "model": model_name,
                 "dataset": dataset_name,
                 "timestamp": timestamp,
+                "protocol_fingerprint": protocol_fingerprint,
+                "protocol": protocol,
                 "results": results,
             },
             f,
@@ -88,7 +92,12 @@ def load_all_results(output_dir: str) -> List[Dict[str, Any]]:
         if filename.endswith(".json"):
             filepath = os.path.join(output_dir, filename)
             with open(filepath, "r", encoding="utf-8") as f:
-                results.append(json.load(f))
+                payload = json.load(f)
+            # The output directory also contains run_manifest.json and paired
+            # analysis JSONs; only timestamped evaluation payloads belong in
+            # the cumulative table.
+            if all(key in payload for key in ("model", "dataset", "results")):
+                results.append(payload)
     return results
 
 
@@ -112,6 +121,7 @@ def format_results_table(results: List[Dict[str, Any]]) -> str:
             # MTEB returns nested dicts; extract main scores
             flat_metrics = _flatten_metrics(metrics)
             for metric_name, value in flat_metrics.items():
+                metric_name = _normalize_metric_name(metric_name)
                 # Normalize MTEB names to match pytrec_eval (e.g. ndcg_at_10 -> ndcg_cut_10)
                 if "_at_" in metric_name and (
                     "ndcg" in metric_name or "map" in metric_name
@@ -127,7 +137,7 @@ def format_results_table(results: List[Dict[str, Any]]) -> str:
                     normalized_name = metric_name
 
                 # p_mrr is stored raw (-1 to +1); display as paper does (× 100)
-                if normalized_name == "p_mrr":
+                if normalized_name == "p_mrr" or normalized_name.endswith(".p_mrr"):
                     rows.append([model, dataset, normalized_name, f"{value * 100:.2f}"])
                 else:
                     rows.append([model, dataset, normalized_name, f"{value:.4f}"])
@@ -136,6 +146,14 @@ def format_results_table(results: List[Dict[str, Any]]) -> str:
 
     headers = ["Model", "Dataset", "Metric", "Score"]
     return tabulate(rows, headers=headers, tablefmt="github")
+
+
+def _normalize_metric_name(metric_name: str) -> str:
+    """Normalize MTEB's p-MRR spelling without dropping task prefixes."""
+    parts = str(metric_name).split(".")
+    if parts[-1] in ("p-MRR", "p_mrr"):
+        parts[-1] = "p_mrr"
+    return ".".join(parts)
 
 
 def _flatten_metrics(d: Any, prefix: str = "") -> Dict[str, float]:
@@ -222,6 +240,7 @@ def print_intermediate_result(
     """Print a compact result table immediately after one model-dataset pair completes."""
     # Build a flat {metric: value} dict the same way format_results_table does
     flat = _flatten_metrics(all_metrics)
+    flat = {_normalize_metric_name(key): value for key, value in flat.items()}
 
     # Pretty-print key metrics first, then the rest
     KEY_METRICS = [
@@ -237,7 +256,7 @@ def print_intermediate_result(
     for key in KEY_METRICS:
         if key in flat:
             # p_mrr is stored raw (-1 to +1); display as paper does (× 100)
-            if key == "p_mrr":
+            if key == "p_mrr" or key.endswith(".p_mrr"):
                 rows.append([key, f"{flat[key] * 100:.2f}"])
             else:
                 rows.append([key, f"{flat[key]:.4f}"])
@@ -245,7 +264,10 @@ def print_intermediate_result(
     # Remaining metrics alphabetically
     for key in sorted(flat):
         if key not in seen:
-            rows.append([key, f"{flat[key]:.4f}"])
+            if key == "p_mrr" or key.endswith(".p_mrr"):
+                rows.append([key, f"{flat[key] * 100:.2f}"])
+            else:
+                rows.append([key, f"{flat[key]:.4f}"])
 
     header = f"  {model_name}  |  {dataset_name}  "
     separator = "-" * max(len(header), 50)
