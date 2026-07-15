@@ -22,6 +22,23 @@ class EvaluationConfigTest(unittest.TestCase):
             "document_title_separator", models["promptriever-llama3.1-8b"]
         )
 
+    def test_rebuttal_ru_models_use_native_document_preprocessing(self):
+        config_dir = Path(__file__).resolve().parents[1] / "configs"
+        expected = {
+            "eval_followir_significance.yaml": {"ru-only-paper", "ru-en-paper"},
+            "eval_step1500_full.yaml": {"4b-pretrain-step-1500"},
+        }
+        errors = []
+        for filename, model_names in expected.items():
+            config = yaml.safe_load(
+                (config_dir / filename).read_text(encoding="utf-8")
+            )
+            models = {model["name"]: model for model in config["models"]}
+            for model_name in model_names:
+                if models[model_name].get("document_title_separator") != ". ":
+                    errors.append(f"{filename}:{model_name}")
+        self.assertEqual(errors, [])
+
     def test_instruction_datasets_have_immutable_protocol_fields(self):
         config_dir = Path(__file__).resolve().parents[1] / "configs"
         errors = []

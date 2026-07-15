@@ -12,6 +12,7 @@ models:
     revision: "01501be5bcf18b5e71a916be777e2416e8a83674"
     base_revision: "1cfa9a7208912126459214e8b04321603b3df60c"
     append_eos: true
+    document_title_separator: ". "
     batch_size: 4
     max_length: 512
 
