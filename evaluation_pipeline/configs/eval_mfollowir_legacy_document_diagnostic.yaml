@@ -9,6 +9,18 @@ generic_instruction: ""
 # candidate set, but documents reproduce the old custom pipeline's
 # ``title + '. ' + text`` formatting instead of MTEB's ``title + ' ' + text``.
 models:
+  - name: "promptriever-llama3.1-8b-legacy-doc-format"
+    type: "causal_lm"
+    model_name_or_path: "samaya-ai/promptriever-llama3.1-8b-v1"
+    revision: "2ead22cfb1b0e0c519c371c63c2ab90ffc511b8a"
+    base_revision: "48d6d0fc4e02fb1269b36940650a1b7233035cbb"
+    batch_size: 16
+    max_length: 512
+    query_prefix: "query:  "
+    passage_prefix: "passage:  "
+    append_eos: true
+    mteb_document_title_separator: ". "
+
   - name: "ru-promptriever-qwen3-4b-legacy-doc-format"
     type: "causal_lm"
     model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v3"
