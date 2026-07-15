@@ -147,11 +147,10 @@ def _per_topic(
         ]
         if values:
             rows[base]["p_mrr"] = float(np.mean(values))
-    return {
-        qid: row
-        for qid, row in rows.items()
-        if "ndcg_cut_20" in row and "p_mrr" in row
-    }
+    # Keep all original-condition nDCG topics.  qrel_diff is available for 39
+    # of the 40 Russian topics, so p-MRR legitimately has one fewer topic;
+    # metric-specific pairing below selects the appropriate set independently.
+    return rows
 
 
 def _bootstrap_ci(values: np.ndarray, rng: np.random.Generator, n: int) -> list[float]:
