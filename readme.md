@@ -237,6 +237,12 @@ The evaluation pipeline benchmarks models across four task categories:
 
 ### Quick Start
 
+For the paper's mFollowIR-RU comparison, each model is evaluated with its
+native preprocessing. ru-Promptriever joins document titles as `title. text`,
+matching its original evaluation pipeline, while Promptriever
+retains its documented query/passage prefixes and default document formatting.
+These choices are pinned in `configs/eval_mfollowir_significance.yaml`.
+
 ```bash
 cd evaluation_pipeline
 pip install -r requirements.txt
@@ -248,6 +254,15 @@ pip install -r requirements.txt
 huggingface-cli login
 # If huggingface-cli is not in PATH, use the Python alternative:
 # python -c "from huggingface_hub import login; login()"
+```
+
+```bash
+# Reproduce the paper-checkpoint mFollowIR-RU comparison and save per-topic
+# predictions for paired confidence intervals.
+python evaluate.py \
+    --config configs/eval_mfollowir_significance.yaml \
+    --models ru-promptriever-qwen3-4b promptriever-llama3.1-8b \
+    --datasets mfollowir_ru
 ```
 
 ```bash

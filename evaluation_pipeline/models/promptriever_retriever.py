@@ -149,7 +149,7 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         query_prefix: str = "",
         passage_prefix: str = "",
         append_eos: Optional[bool] = None,
-        mteb_document_title_separator: Optional[str] = None,
+        document_title_separator: Optional[str] = None,
         revision: Optional[str] = None,
         base_revision: Optional[str] = None,
         **kwargs,
@@ -164,7 +164,7 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         # Tokenization is an explicit evaluation-protocol choice. Historical
         # configs may omit it; those retain the previous PEFT-based behavior.
         self.append_eos = append_eos
-        self.mteb_document_title_separator = mteb_document_title_separator
+        self.document_title_separator = document_title_separator
 
         torch_dtype = getattr(torch, dtype, torch.bfloat16)
         self._is_peft = False  # Will be set to True if PEFT model detected
@@ -172,13 +172,13 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         logger.info(
             "Pinned model protocol: adapter_revision=%r, base_revision=%r, "
             "query_prefix=%r, passage_prefix=%r, append_eos=%r, "
-            "mteb_document_title_separator=%r",
+            "document_title_separator=%r",
             revision,
             base_revision,
             query_prefix,
             passage_prefix,
             append_eos,
-            mteb_document_title_separator,
+            document_title_separator,
         )
 
         if _is_peft_model(model_name_or_path, revision=revision):
@@ -317,16 +317,14 @@ class CausalLMRetriever(EncoderProtocol, BaseRetriever):
         # ("query"/"passage").  Normalize both APIs before applying prefixes.
         prompt_name = resolve_prompt_name(prompt_name, kwargs.get("prompt_type"))
 
-        # The default None preserves MTEB's official ``title + ' ' + text``.
-        # A non-None separator is an explicit diagnostic override and only
-        # applies to document DataLoaders, never to queries or plain lists.
-        diagnostic_separator = (
-            self.mteb_document_title_separator
-            if prompt_name == "passage"
-            else None
+        # Document formatting is part of each model's inference protocol.
+        # ru-Promptriever uses ``title + '. ' + text``; models that leave this
+        # unset retain the dataset/MTEB-provided formatting.
+        title_separator = (
+            self.document_title_separator if prompt_name == "passage" else None
         )
         sentences = materialize_texts(
-            sentences, document_title_separator=diagnostic_separator
+            sentences, document_title_separator=title_separator
         )
 
         if prompt_name not in self._logged_prompt_roles:

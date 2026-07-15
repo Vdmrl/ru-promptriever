@@ -25,6 +25,8 @@ models:
     batch_size: 4
     max_length: 512
     append_eos: true
+    # Native ru-Promptriever document preprocessing used during development.
+    document_title_separator: ". "
 
 datasets:
   - name: "mfollowir_ru"

@@ -127,9 +127,7 @@ def load_model(model_cfg: dict, global_cfg: dict):
             query_prefix=model_cfg.get("query_prefix", ""),
             passage_prefix=model_cfg.get("passage_prefix", ""),
             append_eos=model_cfg.get("append_eos"),
-            mteb_document_title_separator=model_cfg.get(
-                "mteb_document_title_separator"
-            ),
+            document_title_separator=model_cfg.get("document_title_separator"),
             base_revision=model_cfg.get("base_revision"),
         )
 
