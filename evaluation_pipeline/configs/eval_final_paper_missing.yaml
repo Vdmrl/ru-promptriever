@@ -68,20 +68,22 @@ models:
     batch_size: 4
     max_length: 512
 
-  - name: "ru-only-step-180"
+  - name: "ru-only"
     type: "causal_lm"
-    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v2"
-    revision: "a0d174daf820689c61fd86249c759f88d0e44a7e"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-ru-only"
+    # Default main commit containing the selected step-180 adapter.
+    revision: "b7aef87a7acfff2c0366f5671a207d1b264f2b0a"
     base_revision: "1cfa9a7208912126459214e8b04321603b3df60c"
     append_eos: true
     document_title_separator: ". "
     batch_size: 4
     max_length: 512
 
-  - name: "ru-en-step-300"
+  - name: "ru-en"
     type: "causal_lm"
-    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v3"
-    revision: "e51c0133ad5a67c9c374aa97eddc008037d45e29"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b"
+    # Default main commit containing the selected step-300 adapter.
+    revision: "699ec8b3176ea2f268f165c6754d89606ab3aecb"
     base_revision: "1cfa9a7208912126459214e8b04321603b3df60c"
     append_eos: true
     document_title_separator: ". "
@@ -91,7 +93,8 @@ models:
   - name: "ru-promptriever-1.7b-step-320"
     type: "causal_lm"
     model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-1.7b"
-    revision: "612f0dfac69d9fd718c952c388d4e8149d82b96b"
+    # Default main commit containing the selected step-320 adapter.
+    revision: "3bda1fae7b8476bd13e0e753043c394e1e751ff8"
     base_revision: "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e"
     append_eos: true
     document_title_separator: ". "

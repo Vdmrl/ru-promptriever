@@ -63,8 +63,8 @@ run_stage "01_instructir_missing" \
     qwen3-embedding-4b \
     promptriever-7b \
     promptriever-8b \
-    ru-only-step-180 \
-    ru-en-step-300 \
+    ru-only \
+    ru-en \
     ru-promptriever-1.7b-step-320 \
     english-only-4b-step-400 \
   --datasets instructir
@@ -74,8 +74,8 @@ run_stage "01_instructir_missing" \
 run_stage "02_followir_missing" \
   --models \
     qwen3-embedding-4b \
-    ru-only-step-180 \
-    ru-en-step-300 \
+    ru-only \
+    ru-en \
     ru-promptriever-1.7b-step-320 \
   --datasets followir_eng
 
@@ -83,7 +83,7 @@ run_stage "02_followir_missing" \
 # already evaluated with the corrected official protocol on 2026-07-15.
 run_stage "03_mfollowir_missing" \
   --models \
-    ru-only-step-180 \
+    ru-only \
     ru-promptriever-1.7b-step-320 \
     pretrained-4b-step-5750 \
     english-only-4b-step-400 \
@@ -101,8 +101,8 @@ run_stage "04_rubq_missing" \
   --models \
     qwen3-embedding-4b \
     pretrained-4b-step-5750 \
-    ru-only-step-180 \
-    ru-en-step-300 \
+    ru-only \
+    ru-en \
     ru-promptriever-1.7b-step-320 \
     attention-only-4b \
     english-only-4b-step-400 \
@@ -113,8 +113,8 @@ run_stage "05_beir_missing" \
   --models \
     qwen3-embedding-4b \
     pretrained-4b-step-5750 \
-    ru-only-step-180 \
-    ru-en-step-300 \
+    ru-only \
+    ru-en \
     ru-promptriever-1.7b-step-320 \
     attention-only-4b \
     english-only-4b-step-400 \

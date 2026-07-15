@@ -107,6 +107,31 @@ class EvaluationConfigTest(unittest.TestCase):
             [],
         )
 
+    def test_final_named_models_point_to_promoted_hf_defaults(self):
+        config_path = (
+            Path(__file__).resolve().parents[1]
+            / "configs"
+            / "eval_final_paper_missing.yaml"
+        )
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        models = {model["name"]: model for model in config["models"]}
+        self.assertEqual(
+            models["ru-only"]["model_name_or_path"],
+            "Vladimirlv/ru-promptriever-qwen3-4b-ru-only",
+        )
+        self.assertEqual(
+            models["ru-only"]["revision"],
+            "b7aef87a7acfff2c0366f5671a207d1b264f2b0a",
+        )
+        self.assertEqual(
+            models["ru-en"]["model_name_or_path"],
+            "Vladimirlv/ru-promptriever-qwen3-4b",
+        )
+        self.assertEqual(
+            models["ru-en"]["revision"],
+            "699ec8b3176ea2f268f165c6754d89606ab3aecb",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
