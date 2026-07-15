@@ -1,0 +1,168 @@
+name: "Final-paper missing harmonized evaluations"
+output_dir: "./results_final_paper_missing"
+device: "cuda:0"
+dtype: "bfloat16"
+retrieval_top_k: 1000
+generic_instruction: ""
+
+# This config intentionally contains all models needed by the one-GPU runner.
+# The runner selects only missing model/dataset pairs; it does not repeat the
+# corrected July 15/16 mFollowIR, FollowIR, or step-1500 evaluations.
+models:
+  - name: "bm25"
+    type: "bm25"
+    batch_size: 512
+
+  - name: "multilingual-e5-large"
+    type: "encoder"
+    model_name_or_path: "intfloat/multilingual-e5-large"
+    revision: "3d7cfbdacd47fdda877c5cd8a79fbcc4f2a574f3"
+    query_prefix: "query: "
+    passage_prefix: "passage: "
+    batch_size: 64
+    max_length: 512
+
+  - name: "bge-m3"
+    type: "encoder"
+    model_name_or_path: "BAAI/bge-m3"
+    revision: "5617a9f61b028005a4858fdac845db406aefb181"
+    batch_size: 32
+    max_length: 512
+
+  - name: "qwen3-embedding-4b"
+    type: "qwen3_embedding"
+    model_name_or_path: "Qwen/Qwen3-Embedding-4B"
+    revision: "5cf2132abc99cad020ac570b19d031efec650f2b"
+    batch_size: 16
+    max_length: 512
+
+  - name: "promptriever-7b"
+    type: "causal_lm"
+    model_name_or_path: "samaya-ai/promptriever-llama2-7b-v1"
+    revision: "30b14e3813c0fa45facfd01a594580c3fe5ecf23"
+    base_revision: "01c7f73d771dfac7d292323805ebc428287df4f9"
+    query_prefix: "query:  "
+    passage_prefix: "passage:  "
+    append_eos: true
+    batch_size: 4
+    max_length: 512
+
+  - name: "promptriever-8b"
+    type: "causal_lm"
+    model_name_or_path: "samaya-ai/promptriever-llama3.1-8b-v1"
+    revision: "2ead22cfb1b0e0c519c371c63c2ab90ffc511b8a"
+    base_revision: "48d6d0fc4e02fb1269b36940650a1b7233035cbb"
+    query_prefix: "query:  "
+    passage_prefix: "passage:  "
+    append_eos: true
+    batch_size: 4
+    max_length: 512
+
+  - name: "pretrained-4b-step-5750"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-pretrained"
+    revision: "dbf03096c11c2e3ffad74aeec0c99c0009022b72"
+    base_revision: "1cfa9a7208912126459214e8b04321603b3df60c"
+    append_eos: true
+    document_title_separator: ". "
+    batch_size: 4
+    max_length: 512
+
+  - name: "ru-only-step-180"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v2"
+    revision: "a0d174daf820689c61fd86249c759f88d0e44a7e"
+    base_revision: "1cfa9a7208912126459214e8b04321603b3df60c"
+    append_eos: true
+    document_title_separator: ". "
+    batch_size: 4
+    max_length: 512
+
+  - name: "ru-en-step-300"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-v3"
+    revision: "e51c0133ad5a67c9c374aa97eddc008037d45e29"
+    base_revision: "1cfa9a7208912126459214e8b04321603b3df60c"
+    append_eos: true
+    document_title_separator: ". "
+    batch_size: 4
+    max_length: 512
+
+  - name: "ru-promptriever-1.7b-step-320"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-1.7b"
+    revision: "612f0dfac69d9fd718c952c388d4e8149d82b96b"
+    base_revision: "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e"
+    append_eos: true
+    document_title_separator: ". "
+    batch_size: 8
+    max_length: 512
+
+  - name: "attention-only-4b"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-attn"
+    revision: "1c6c958776a685c4a73baff566e4d826bb8a8e35"
+    base_revision: "1cfa9a7208912126459214e8b04321603b3df60c"
+    append_eos: true
+    document_title_separator: ". "
+    batch_size: 4
+    max_length: 512
+
+  - name: "english-only-4b-step-400"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-4b-en-only"
+    revision: "6f135126cd794a971281939659573580359578a7"
+    base_revision: "1cfa9a7208912126459214e8b04321603b3df60c"
+    append_eos: true
+    document_title_separator: ". "
+    batch_size: 4
+    max_length: 512
+
+  - name: "ru-promptriever-0.6b-final"
+    type: "causal_lm"
+    model_name_or_path: "Vladimirlv/ru-promptriever-qwen3-0.6b"
+    revision: "8090f4c29f41a41130f59b1549c64b5904de23d2"
+    base_revision: "c1899de289a04d12100db370d81485cdf75e47ca"
+    append_eos: true
+    document_title_separator: ". "
+    batch_size: 16
+    max_length: 512
+
+datasets:
+  - name: "mfollowir_ru"
+    type: "mfollowir"
+    data_path: "jhu-clsp/mFollowIR"
+    revision: "09eecbe45c54b4a6dfb8e68e345cae77337768e2"
+    save_predictions: true
+    metrics:
+      - "ndcg_at_20"
+      - "p_mrr"
+
+  - name: "instructir"
+    type: "en_mteb"
+    save_predictions: true
+    task_names:
+      - "InstructIR"
+
+  - name: "followir_eng"
+    type: "en_mteb"
+    save_predictions: true
+    task_names:
+      - "Robust04InstructionRetrieval"
+      - "Core17InstructionRetrieval"
+      - "News21InstructionRetrieval"
+
+  - name: "rumteb_retrieval"
+    type: "rumteb"
+    task_names:
+      - "RuBQRetrieval"
+    metrics:
+      - "ndcg_at_10"
+
+  - name: "en_mteb_retrieval"
+    type: "en_mteb"
+    task_names:
+      - "SciFact"
+      - "NFCorpus"
+    metrics:
+      - "ndcg_at_10"

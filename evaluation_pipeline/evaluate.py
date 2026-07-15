@@ -111,6 +111,7 @@ def load_model(model_cfg: dict, global_cfg: dict):
         return EncoderRetriever(
             model_name_or_path=resolved_path,
             device=device,
+            revision=model_cfg.get("revision"),
             query_prefix=model_cfg.get("query_prefix", ""),
             passage_prefix=model_cfg.get("passage_prefix", ""),
             max_length=model_cfg.get("max_length", 512),
@@ -135,6 +136,7 @@ def load_model(model_cfg: dict, global_cfg: dict):
         return Qwen3EmbeddingRetriever(
             model_name_or_path=resolved_path,
             device=device,
+            revision=model_cfg.get("revision"),
             max_length=model_cfg.get("max_length", 8192),
         )
 

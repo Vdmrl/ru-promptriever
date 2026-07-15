@@ -26,6 +26,7 @@ class EncoderRetriever(EncoderProtocol, BaseRetriever):
         self,
         model_name_or_path: str,
         device: str = "cuda:0",
+        revision: Optional[str] = None,
         query_prefix: str = "",
         passage_prefix: str = "",
         max_length: int = 512,
@@ -46,6 +47,7 @@ class EncoderRetriever(EncoderProtocol, BaseRetriever):
         self.model = SentenceTransformer(
             model_name_or_path,
             device=device,
+            revision=revision,
             trust_remote_code=True,
         )
         self.model.max_seq_length = max_length

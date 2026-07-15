@@ -66,6 +66,47 @@ class EvaluationConfigTest(unittest.TestCase):
                         )
         self.assertEqual(errors, [])
 
+    def test_final_paper_config_pins_every_hub_model(self):
+        config_path = (
+            Path(__file__).resolve().parents[1]
+            / "configs"
+            / "eval_final_paper_missing.yaml"
+        )
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        errors = []
+        for model in config["models"]:
+            if model["type"] == "bm25":
+                continue
+            if not model.get("revision"):
+                errors.append(f"{model['name']} has no revision")
+            if model["type"] == "causal_lm" and not model.get("base_revision"):
+                errors.append(f"{model['name']} has no base_revision")
+        self.assertEqual(errors, [])
+
+    def test_final_ru_models_use_one_native_format(self):
+        config_path = (
+            Path(__file__).resolve().parents[1]
+            / "configs"
+            / "eval_final_paper_missing.yaml"
+        )
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        ru_models = [
+            model
+            for model in config["models"]
+            if model["type"] == "causal_lm"
+            and not model["name"].startswith("promptriever-")
+        ]
+        self.assertTrue(ru_models)
+        self.assertEqual(
+            [
+                model["name"]
+                for model in ru_models
+                if model.get("document_title_separator") != ". "
+                or model.get("append_eos") is not True
+            ],
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

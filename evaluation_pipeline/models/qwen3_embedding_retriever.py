@@ -32,6 +32,7 @@ class Qwen3EmbeddingRetriever(EncoderProtocol, BaseRetriever):
         self,
         model_name_or_path: str = "Qwen/Qwen3-Embedding-4B",
         device: str = "cuda:0",
+        revision: Optional[str] = None,
         max_length: int = 8192,
         **kwargs,
     ):
@@ -39,6 +40,7 @@ class Qwen3EmbeddingRetriever(EncoderProtocol, BaseRetriever):
         self.model = SentenceTransformer(
             model_name_or_path,
             device=device,
+            revision=revision,
             trust_remote_code=True,
         )
         self.model.max_seq_length = max_length
