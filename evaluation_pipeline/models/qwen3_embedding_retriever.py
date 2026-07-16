@@ -28,6 +28,15 @@ class Qwen3EmbeddingRetriever(EncoderProtocol, BaseRetriever):
     is needed — just pass prompts={"query": "Instruct: ..."} when encoding.
     """
 
+    @property
+    def mteb_model_meta(self):
+        """Mutable metadata required when MTEB saves task predictions."""
+        return getattr(self, "_mteb_model_meta", None)
+
+    @mteb_model_meta.setter
+    def mteb_model_meta(self, value):
+        self._mteb_model_meta = value
+
     def __init__(
         self,
         model_name_or_path: str = "Qwen/Qwen3-Embedding-4B",
@@ -36,6 +45,7 @@ class Qwen3EmbeddingRetriever(EncoderProtocol, BaseRetriever):
         max_length: int = 8192,
         **kwargs,
     ):
+        self._mteb_model_meta = None
         logger.info(f"Loading Qwen3-Embedding: {model_name_or_path}")
         self.model = SentenceTransformer(
             model_name_or_path,

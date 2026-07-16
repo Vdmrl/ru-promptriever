@@ -22,6 +22,15 @@ logger = logging.getLogger(__name__)
 class EncoderRetriever(EncoderProtocol, BaseRetriever):
     """Wrapper for Encoder-Only models via sentence-transformers."""
 
+    @property
+    def mteb_model_meta(self):
+        """Mutable metadata required when MTEB saves task predictions."""
+        return getattr(self, "_mteb_model_meta", None)
+
+    @mteb_model_meta.setter
+    def mteb_model_meta(self, value):
+        self._mteb_model_meta = value
+
     def __init__(
         self,
         model_name_or_path: str,
@@ -40,6 +49,7 @@ class EncoderRetriever(EncoderProtocol, BaseRetriever):
             passage_prefix: Prefix to prepend to passages (e.g. "passage: " for E5).
             max_length: Maximum token length.
         """
+        self._mteb_model_meta = None
         self.query_prefix = query_prefix
         self.passage_prefix = passage_prefix
 
