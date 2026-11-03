@@ -22,12 +22,41 @@ Standard dense retrieval models score query–passage pairs using a single seman
 **RuPromptriever** extends this approach to Russian by:
 
 1. Building a synthetic instruction dataset on top of the Russian split of [mMARCO](https://github.com/unicamp-dl/mMARCO).
-2. Training a Qwen3-4B bi-encoder with QLoRA + GradCache on the curated data.
+2. Training a Qwen3-4B bi-encoder with LoRA + GradCache on the curated data.
 3. Evaluating instruction-following retrieval quality on **mFollowIR-RU**, a **synthetic test split**, and **ruMTEB** benchmarks.
 
 The core insight from the original paper (replicated here in Russian): instruction-following capacity is *not* retained after standard IR fine-tuning. Two additions to the training data are required — **instructions that redefine per-query relevance** and **instruction-negative passages** (documents that are topically relevant but violate the instruction constraint).
 
 ---
+
+## Paper release recipes and revisions
+
+The resource paper releases a dataset and 1.7B/4B retriever family. Dataset:
+[ru-promptriever-dataset](https://huggingface.co/datasets/Vladimirlv/ru-promptriever-dataset).
+The retained training set contains 484,396 standard/instructed pairs after
+excluding flagged repeated records.
+
+| Released variant | Recipe | Evaluated adapter revision |
+| --- | --- | --- |
+| [1.7B](https://huggingface.co/Vladimirlv/ru-promptriever-qwen3-1.7b) | `training_pipeline/configs/exp7_qwen3-1.7b.yaml` | `3bda1fae7b8476bd13e0e753043c394e1e751ff8` |
+| [4B Ru-only](https://huggingface.co/Vladimirlv/ru-promptriever-qwen3-4b-ru-only) | Synthetic stage: `exp4_qwen3-4b_final.yaml`; continuation: `exp5_continue_training.yaml` | `b7aef87a7acfff2c0366f5671a207d1b264f2b0a` |
+| [4B Ru+En](https://huggingface.co/Vladimirlv/ru-promptriever-qwen3-4b) | Synthetic stage: `exp4_qwen3-4b_final.yaml`; continuation: `exp8_gold_mix.yaml` | `699ec8b3176ea2f268f165c6754d89606ab3aecb` |
+
+Recipe filenames without a directory are relative to `training_pipeline/configs/`. Epoch counts
+are planned schedules; evaluated revisions identify the released artifacts.
+The main synthetic-stage recipe uses paired views, 30 total negative slots,
+and BF16 LoRA. The generic 7-negative/instruct-only example later in this README
+is an alternative configuration, not the paper's main recipe.
+
+The [versioned analysis bundle](https://huggingface.co/datasets/Vladimirlv/ru-promptriever-dataset/tree/e023ebdb91e0a993f6d4d45a946794c86e380691/analysis/ecir2027-resource-v1)
+contains frozen samples, parsed judgments, metrics, pinned evaluation provenance
+and offline reproduction commands. Offline aggregation uses saved judgments;
+regenerating the dataset separately requires source data and GigaChat API access.
+Generation and final filtering use GigaChat-2-Max, at temperatures 0.87 and 0.
+The instructed positive is the rewritten positive if it passes filtering,
+otherwise a passing generated positive. Standard views keep the rewritten
+source positive. Training BM25 indexes rewritten source passages; held-out
+candidate pools additionally contain accepted synthetic documents.
 
 ## Repository Structure
 
@@ -55,7 +84,7 @@ The core insight from the original paper (replicated here in Russian): instructi
 │       ├── prompts.py        # Filter prompt templates
 │       └── scheduler.py      # Shared MSK-based thread scheduler
 │
-├── training_pipeline/        # Stage 3: QLoRA fine-tuning with GradCache
+├── training_pipeline/        # Stage 3: LoRA fine-tuning with GradCache
 │   ├── train.py              # Main training script (single-GPU + DeepSpeed)
 │   ├── merge_lora.py         # Merges LoRA adapter into base model
 │   ├── configs/              # YAML training configs per experiment
@@ -89,7 +118,7 @@ Triples are sourced from two complementary datasets:
 For each `(query, positive, negative)` triple from mMARCO-RU:
 
 1. **Instruction generation** (`GigaChat-2-Max`): The model rewrites the machine-translated query into natural Russian and generates a retrieval instruction that keeps the original positive relevant while excluding the negative. Instructions vary in length (short / medium / long / very long) and style (negation / persona / background / feature).
-2. **Instruction-negative mining** (`GigaChat-2-Max`): Using the rewritten query and its instruction, the model synthesizes three new passages — one query-positive/instruction-positive (backup positive) and two query-positive/instruction-negative candidates.
+2. **Instruction-negative mining** (`GigaChat-2-Max`): Using the rewritten query and its instruction, the model synthesizes four new passages — one query-positive/instruction-positive (backup positive) and three query-positive/instruction-negative candidates.
 
 ```bash
 # Install dependencies
@@ -109,7 +138,7 @@ python data_generation/main.py \
 
 ### Stage 2 — Filtering & Dataset Assembly (`data_preprocessing/`)
 
-The generated data is validated by a cheaper LLM (`GigaChat-2-Lite`) before being assembled into the final dataset.
+The generated data is validated by `GigaChat-2-Max` at temperature zero before being assembled into the final dataset.
 
 ```bash
 pip install -r data_preprocessing/requirements.txt
@@ -144,7 +173,7 @@ huggingface-cli upload Vladimirlv/ru-promptriever-dataset \
 
 ## Training
 
-Fine-tuning uses **QLoRA** (4-bit NF4 quantization + LoRA rank-32) with **GradCache** for large effective batch sizes on limited GPU memory. The model is trained with an InfoNCE contrastive loss using last-token pooling (EOS pooling), matching the RepLLaMA / original Promptriever convention.
+The paper's main 4B recipe uses **LoRA** (rank 32) with BF16 backbone weights and **GradCache**. Optional QLoRA configurations are also supplied; the generic launch example below is not the main paper recipe. Use `training_pipeline/configs/exp4_qwen3-4b_final.yaml` for the main synthetic-stage recipe and the continuation configs for the released final variants. The model is trained with an InfoNCE contrastive loss using last-token pooling (EOS pooling), matching the RepLLaMA / original Promptriever convention.
 
 ### Installation
 
@@ -334,7 +363,7 @@ The non-commercial restriction on the model and dataset originates from the upst
 ## References
 
 - **Promptriever** — Weller et al., 2024. [*Promptriever: Instruction-Trained Retrievers Can Be Prompted Like Language Models*](https://arxiv.org/abs/2409.11136). arXiv:2409.11136.
-- **mFollowIR** — Weller et al., 2025. [*mFollowIR: Multilingual Following of Repository Relevance Instructions*](https://arxiv.org/abs/2501.03516). arXiv:2501.03516.
+- **mFollowIR** — Weller et al., 2025. [*mFollowIR: A Multilingual Benchmark for Instruction Following in Retrieval*](https://arxiv.org/abs/2501.19264). arXiv:2501.19264.
 - **RepLLaMA** — Ma et al., 2023. *Fine-Tuning LLaMA for Multi-Stage Text Retrieval*.
 - **mMARCO** — Bonifacio et al., 2022. [mMARCO: A Multilingual Version of MS MARCO Passage Ranking Dataset](https://github.com/unicamp-dl/mMARCO).
 - **Tevatron MS MARCO aug** — Gao et al., 2022. [Tevatron: An Efficient and Flexible Toolkit for Dense Retrieval](https://github.com/texttron/tevatron).

@@ -9,7 +9,7 @@ model_info:
   "BASE_URL": "https://tslew-mvp000003.esrt.sber.ru/gigachat/v1"
   "CERT_FILE": "/home/asup_dev/certs/cert.pem"
   "KEY_FILE": "/home/asup_dev/certs/key.pem"
-  "MODEL_NAME": "GigaChat-2-Lite"
+  "MODEL_NAME": "GigaChat-2-Max"
   "VERIFY_SSL_CERTS": False
   "PROFANITY_CHECK": False
   "TIMEOUT": 360

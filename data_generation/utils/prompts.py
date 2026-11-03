@@ -194,5 +194,14 @@ INSTRUCTION_NEGATIVE_MINING_PROMPT = """Сгенерируй 4 документ�
 
 # --- Helper functions ---
 
+def get_random_generation_params() -> dict[str, str]:
+    """Sample a length target and a compatible style prompt."""
+    length_index = random.randrange(len(LENGTH_OPTIONS))
+    styles = STYLE_OPTIONS_SHORT if length_index < 2 else STYLE_OPTIONS_LONG
+    return {
+        "length_format": LENGTH_OPTIONS[length_index],
+        "style_instruction": random.choice(styles),
+    }
+
 
 
